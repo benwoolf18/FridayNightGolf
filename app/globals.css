@@ -34,7 +34,7 @@ header p{margin:0;font:14px system-ui,sans-serif;opacity:.85}
 .suggestions{position:absolute;top:100%;left:0;right:0;margin:4px 0 0;padding:0;list-style:none;background:var(--card);border:1px solid var(--line);border-radius:10px;max-height:180px;overflow:auto;z-index:5;box-shadow:0 8px 20px rgba(0,0,0,.15)}
 .suggestions li{padding:10px 12px;font:14px system-ui,sans-serif;cursor:pointer;color:var(--ink)}
 .suggestions li:hover{background:var(--bg)}
-.scoreinputs{display:flex;gap:10px}
+.scoreinputs{display:flex;flex-direction:column;gap:14px}
 .scoreinputs label{flex:1}
 .fieldlabel{margin:0 0 6px;font:14px system-ui,sans-serif;color:var(--muted)}
 .playerchecks{display:flex;flex-direction:column;gap:8px;max-height:160px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:10px}
@@ -89,4 +89,5 @@ footer{text-align:center;color:var(--muted);font:13px system-ui,sans-serif;paddi
   main,.results{padding-top:26px}main{grid-template-columns:1fr 1fr;gap:22px}
   .card{padding:26px}h2{font-size:26px}
   table{font-size:15px}th,td{padding:14px 18px}
+  .scoreinputs{flex-direction:row;gap:10px}
 }
