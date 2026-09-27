@@ -16,10 +16,15 @@ main{display:grid;gap:14px;grid-template-columns:1fr}
 h2{margin:0;font-size:22px}
 .card p{margin:0;color:var(--muted);font:15px system-ui,sans-serif}
 ul{margin:0;padding-left:18px;font:14px system-ui,sans-serif;color:var(--muted)}
-.card button{margin-top:4px;font:600 17px system-ui,sans-serif;min-height:52px;border:0;border-radius:12px;background:var(--green);color:#fff;cursor:pointer}
+.actions{margin-top:4px;display:flex;flex-direction:column;gap:10px}
+.card button{font:600 17px system-ui,sans-serif;min-height:52px;border:0;border-radius:12px;background:var(--green);color:#fff;cursor:pointer}
+.card button.secondary{background:transparent;color:var(--green);border:1.5px solid var(--green)}
 .match button{background:var(--gold);color:#1c2b22}
+.match button.secondary{background:transparent;color:var(--gold);border:1.5px solid var(--gold)}
 .results{padding-bottom:36px}
-.results h2{margin:22px 0 10px}
+.resultshead{margin:22px 0 10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.resultshead h2{margin:0}
+.logscore{font:600 14px system-ui,sans-serif;min-height:40px;padding:0 16px;border:0;border-radius:10px;background:var(--green);color:#fff;cursor:pointer;white-space:nowrap}
 .tablewrap{background:var(--card);border:1px solid var(--line);border-top:5px solid var(--green2);border-radius:16px}
 table{width:100%;border-collapse:collapse;font:14px system-ui,sans-serif;table-layout:fixed}
 th,td{text-align:left;padding:12px 8px;border-bottom:1px solid var(--line);vertical-align:middle}

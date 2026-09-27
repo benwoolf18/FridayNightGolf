@@ -70,31 +70,40 @@ export default function Home() {
       <main>
         <section className="card">
           <div className="icon">📝</div>
-          <h2>Record a score</h2>
+          <h2>Single Round</h2>
           <p>Log a round: who played, what they shot and where.</p>
           <ul>
             <li>Pick the course and date</li>
             <li>Add the players and their scores</li>
             <li>Browse results by course or player</li>
           </ul>
-          <button type="button">Record a score</button>
+          <div className="actions">
+            <button type="button">Start a new round</button>
+            <button type="button" className="secondary">View a current round</button>
+          </div>
         </section>
 
         <section className="card match">
           <div className="icon">🏆</div>
-          <h2>Create a match</h2>
+          <h2>Tournament</h2>
           <p>Set up a live Ryder Cup-style scoreboard for tonight's round.</p>
           <ul>
             <li>Choose a game format</li>
             <li>Split players into teams</li>
             <li>Follow the score hole by hole</li>
           </ul>
-          <button type="button">Create a match</button>
+          <div className="actions">
+            <button type="button">Start a new tournament</button>
+            <button type="button" className="secondary">View existing tournaments</button>
+          </div>
         </section>
       </main>
 
       <section className="results">
-        <h2>Results</h2>
+        <div className="resultshead">
+          <h2>Results</h2>
+          <button type="button" className="logscore">📝 Log a score</button>
+        </div>
         <div className="tablewrap">
           <table>
             <colgroup><col className="d" /><col className="c" /><col className="s" /><col className="p" /></colgroup>
