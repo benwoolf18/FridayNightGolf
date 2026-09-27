@@ -16,7 +16,16 @@ header p{margin:0;font:14px system-ui,sans-serif;opacity:.85}
 .menu button+button{border-top:1px solid var(--line)}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:30}
 .modal{background:var(--card);border-radius:16px;padding:22px;width:100%;max-width:380px;max-height:90vh;overflow:auto}
+.modal.wide{max-width:480px}
 .modal h2{margin:0 0 14px;font-size:20px}
+.muted{color:var(--muted);font:14px system-ui,sans-serif;margin:0 0 14px}
+.playertablewrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:14px}
+.playertable{width:100%;border-collapse:collapse;font:14px system-ui,sans-serif}
+.playertable th,.playertable td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+.playertable tr:last-child td{border-bottom:0}
+.playertable th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.playertable tbody tr{cursor:pointer}
+.playertable tbody tr:hover{background:var(--bg)}
 .modal form{display:flex;flex-direction:column;gap:14px}
 .modal label{display:flex;flex-direction:column;gap:6px;font:14px system-ui,sans-serif;color:var(--muted)}
 .modal input[type="text"]{font:16px system-ui,sans-serif;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}

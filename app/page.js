@@ -29,12 +29,15 @@ export default function Home() {
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
   const [openId, setOpenId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [modal, setModal] = useState(null); // "addPlayer" | "editPlayer" | "editHandicaps" | null
-  const [players, setPlayers] = useState([]);
+  const [modal, setModal] = useState(null); // "addPlayer" | "editPlayer" | "viewPlayers" | null
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [playerList, setPlayerList] = useState([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState("");
 
   useEffect(() => {
     const close = (e) => {
@@ -49,10 +52,40 @@ export default function Home() {
     setModal(name);
     setMenuOpen(false);
     setForm(emptyForm);
+    setEditingId(null);
     setErrors({});
     setSaveError("");
+    if (name === "viewPlayers") loadPlayers();
   };
   const closeModal = () => setModal(null);
+
+  const loadPlayers = async () => {
+    setListLoading(true);
+    setListError("");
+    try {
+      const res = await fetch("/api/players");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not load players");
+      setPlayerList(data);
+    } catch (err) {
+      setListError(err.message || "Something went wrong — try again.");
+    } finally {
+      setListLoading(false);
+    }
+  };
+
+  const openEditPlayer = (row) => {
+    setEditingId(row.id);
+    setForm({
+      firstName: row.first_name || "",
+      surname: row.surname || "",
+      handicap: row.handicap != null ? String(row.handicap) : "",
+      photo: row.photo_url || "",
+    });
+    setErrors({});
+    setSaveError("");
+    setModal("editPlayer");
+  };
 
   const setField = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -64,7 +97,7 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
-  const saveNewPlayer = async (e) => {
+  const savePlayer = async (e) => {
     e.preventDefault();
     const nextErrors = {};
     if (!form.firstName.trim()) nextErrors.firstName = "First name is required";
@@ -76,14 +109,15 @@ export default function Home() {
     setSaveError("");
     setSaving(true);
     try {
-      const res = await fetch("/api/players", {
-        method: "POST",
+      const url = editingId ? `/api/players/${editingId}` : "/api/players";
+      const method = editingId ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save player");
-      setPlayers((p) => [...p, data]);
       closeModal();
     } catch (err) {
       setSaveError(err.message || "Something went wrong — try again.");
@@ -138,8 +172,7 @@ export default function Home() {
         {menuOpen && (
           <nav className="menu">
             <button type="button" onClick={() => openModal("addPlayer")}>Add New Player</button>
-            <button type="button" onClick={() => openModal("editPlayer")}>Edit Existing Player</button>
-            <button type="button" onClick={() => openModal("editHandicaps")}>Edit Handicaps</button>
+            <button type="button" onClick={() => openModal("viewPlayers")}>View Existing Players</button>
           </nav>
         )}
         <div className="flag">⛳</div>
@@ -219,17 +252,61 @@ export default function Home() {
 
       <footer>Demo data</footer>
 
-      {modal === "addPlayer" && (
+      {modal === "viewPlayers" && (
+        <div className="overlay" onClick={closeModal}>
+          <div
+            className="modal wide"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Existing players"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Existing Players</h2>
+
+            {listLoading && <p className="muted">Loading players…</p>}
+            {listError && <span className="error">{listError}</span>}
+
+            {!listLoading && !listError && (
+              playerList.length === 0 ? (
+                <p className="muted">No players yet — add one from the menu.</p>
+              ) : (
+                <div className="playertablewrap">
+                  <table className="playertable">
+                    <thead>
+                      <tr><th>First Name</th><th>Surname</th><th>Handicap</th></tr>
+                    </thead>
+                    <tbody>
+                      {playerList.map((p) => (
+                        <tr key={p.id} onClick={() => openEditPlayer(p)}>
+                          <td>{p.first_name}</td>
+                          <td>{p.surname || "—"}</td>
+                          <td>{p.handicap}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            )}
+
+            <div className="modalactions">
+              <button type="button" className="cancel" onClick={closeModal}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(modal === "addPlayer" || modal === "editPlayer") && (
         <div className="overlay" onClick={closeModal}>
           <div
             className="modal"
             role="dialog"
             aria-modal="true"
-            aria-label="Add new player"
+            aria-label={modal === "editPlayer" ? "Edit player" : "Add new player"}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2>Add New Player</h2>
-            <form onSubmit={saveNewPlayer} noValidate>
+            <h2>{modal === "editPlayer" ? "Edit Player" : "Add New Player"}</h2>
+            <form onSubmit={savePlayer} noValidate>
               <label>
                 First Name *
                 <input type="text" value={form.firstName} onChange={setField("firstName")} />
