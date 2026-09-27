@@ -23,16 +23,79 @@ const fmtDate = (iso) => {
 };
 const fmtScore = (n) => (n > 0 ? `+${n}` : n === 0 ? "E" : String(n));
 
+const emptyForm = { firstName: "", surname: "", handicap: "", photo: "" };
+
 export default function Home() {
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
   const [openId, setOpenId] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [modal, setModal] = useState(null); // "addPlayer" | "editPlayer" | "editHandicaps" | null
+  const [players, setPlayers] = useState([]);
+  const [form, setForm] = useState(emptyForm);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     const close = (e) => {
       if (!e.target.closest(".players")) setOpenId(null);
+      if (!e.target.closest(".menu") && !e.target.closest(".burger")) setMenuOpen(false);
     };
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
+  }, []);
+
+  const openModal = (name) => {
+    setModal(name);
+    setMenuOpen(false);
+    setForm(emptyForm);
+    setErrors({});
+    setSaveError("");
+  };
+  const closeModal = () => setModal(null);
+
+  const setField = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const onPhoto = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setForm((f) => ({ ...f, photo: reader.result }));
+    reader.readAsDataURL(file);
+  };
+
+  const saveNewPlayer = async (e) => {
+    e.preventDefault();
+    const nextErrors = {};
+    if (!form.firstName.trim()) nextErrors.firstName = "First name is required";
+    if (!form.handicap.trim()) nextErrors.handicap = "Handicap is required";
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors);
+      return;
+    }
+    setSaveError("");
+    setSaving(true);
+    try {
+      const res = await fetch("/api/players", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not save player");
+      setPlayers((p) => [...p, data]);
+      closeModal();
+    } catch (err) {
+      setSaveError(err.message || "Something went wrong — try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && closeModal();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
 
   const rows = [...GAMES].sort((a, b) => {
@@ -62,6 +125,23 @@ export default function Home() {
   return (
     <>
       <header>
+        <button
+          type="button"
+          className="burger"
+          aria-haspopup="true"
+          aria-expanded={menuOpen}
+          aria-label="Menu"
+          onClick={() => setMenuOpen((o) => !o)}
+        >
+          <span></span><span></span><span></span>
+        </button>
+        {menuOpen && (
+          <nav className="menu">
+            <button type="button" onClick={() => openModal("addPlayer")}>Add New Player</button>
+            <button type="button" onClick={() => openModal("editPlayer")}>Edit Existing Player</button>
+            <button type="button" onClick={() => openModal("editHandicaps")}>Edit Handicaps</button>
+          </nav>
+        )}
         <div className="flag">⛳</div>
         <h1>Friday Night Golf</h1>
         <p>Scores, rivalries and bragging rights.</p>
@@ -138,6 +218,51 @@ export default function Home() {
       </section>
 
       <footer>Demo data</footer>
+
+      {modal === "addPlayer" && (
+        <div className="overlay" onClick={closeModal}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add new player"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Add New Player</h2>
+            <form onSubmit={saveNewPlayer} noValidate>
+              <label>
+                First Name *
+                <input type="text" value={form.firstName} onChange={setField("firstName")} />
+              </label>
+              {errors.firstName && <span className="error">{errors.firstName}</span>}
+
+              <label>
+                Surname
+                <input type="text" value={form.surname} onChange={setField("surname")} />
+              </label>
+
+              <label>
+                Handicap *
+                <input type="text" inputMode="decimal" value={form.handicap} onChange={setField("handicap")} />
+              </label>
+              {errors.handicap && <span className="error">{errors.handicap}</span>}
+
+              <label>
+                Add Photo
+                <input type="file" accept="image/*" onChange={onPhoto} />
+              </label>
+              {form.photo && <img className="preview" src={form.photo} alt="" />}
+
+              {saveError && <span className="error">{saveError}</span>}
+
+              <div className="modalactions">
+                <button type="button" className="cancel" onClick={closeModal} disabled={saving}>Cancel</button>
+                <button type="submit" className="save" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }
