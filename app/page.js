@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Demo data - will be replaced by real records later
 const GAMES = [
@@ -24,6 +24,7 @@ const fmtDate = (iso) => {
 const fmtScore = (n) => (n > 0 ? `+${n}` : n === 0 ? "E" : String(n));
 
 const emptyForm = { firstName: "", surname: "", handicap: "", photo: "" };
+const emptyScoreForm = { date: "", courseName: "", strokes: "", scoreToPar: "", numPlayers: "", playerIds: [] };
 
 export default function Home() {
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
@@ -38,11 +39,19 @@ export default function Home() {
   const [playerList, setPlayerList] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState("");
+  const [scoreForm, setScoreForm] = useState(emptyScoreForm);
+  const [scoreErrors, setScoreErrors] = useState({});
+  const [scoreSaving, setScoreSaving] = useState(false);
+  const [scoreSaveError, setScoreSaveError] = useState("");
+  const [courseSuggestions, setCourseSuggestions] = useState([]);
+  const [courseOpen, setCourseOpen] = useState(false);
+  const courseTimer = useRef(null);
 
   useEffect(() => {
     const close = (e) => {
       if (!e.target.closest(".players")) setOpenId(null);
       if (!e.target.closest(".menu") && !e.target.closest(".burger")) setMenuOpen(false);
+      if (!e.target.closest(".autocomplete")) setCourseOpen(false);
     };
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
@@ -56,6 +65,14 @@ export default function Home() {
     setErrors({});
     setSaveError("");
     if (name === "viewPlayers") loadPlayers();
+    if (name === "logScore") {
+      setScoreForm(emptyScoreForm);
+      setScoreErrors({});
+      setScoreSaveError("");
+      setCourseSuggestions([]);
+      setCourseOpen(false);
+      loadPlayers();
+    }
   };
   const closeModal = () => setModal(null);
 
@@ -131,6 +148,93 @@ export default function Home() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
+
+  const setScoreField = (key) => (e) => setScoreForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const onCourseChange = (e) => {
+    const value = e.target.value;
+    setScoreForm((f) => ({ ...f, courseName: value }));
+    setCourseOpen(true);
+    if (courseTimer.current) clearTimeout(courseTimer.current);
+    if (value.trim().length < 3) {
+      setCourseSuggestions([]);
+      return;
+    }
+    courseTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/courses/search?q=${encodeURIComponent(value.trim())}`);
+        const data = await res.json();
+        if (res.ok) setCourseSuggestions(data);
+      } catch {
+        // silently ignore — worst case, no suggestions show
+      }
+    }, 300);
+  };
+
+  const pickCourse = (name) => {
+    setScoreForm((f) => ({ ...f, courseName: name }));
+    setCourseSuggestions([]);
+    setCourseOpen(false);
+  };
+
+  const onNumPlayersChange = (e) => {
+    const val = e.target.value;
+    const cap = Number(val) || 0;
+    setScoreForm((f) => ({ ...f, numPlayers: val, playerIds: cap ? f.playerIds.slice(0, cap) : f.playerIds }));
+  };
+
+  const toggleScorePlayer = (id) => {
+    setScoreForm((f) => {
+      const already = f.playerIds.includes(id);
+      if (already) return { ...f, playerIds: f.playerIds.filter((p) => p !== id) };
+      const cap = Number(f.numPlayers) || 0;
+      if (cap && f.playerIds.length >= cap) return f;
+      return { ...f, playerIds: [...f.playerIds, id] };
+    });
+  };
+
+  const saveScore = async (e) => {
+    e.preventDefault();
+    const cap = Number(scoreForm.numPlayers) || 0;
+    const nextErrors = {};
+    if (!scoreForm.date) nextErrors.date = "Date is required";
+    if (!scoreForm.courseName.trim()) nextErrors.courseName = "Course is required";
+    if (!scoreForm.numPlayers) nextErrors.numPlayers = "Number of players is required";
+    if (!scoreForm.strokes.trim() && !scoreForm.scoreToPar.trim()) {
+      nextErrors.score = "Enter either Number of Strokes or Score";
+    }
+    if (cap && scoreForm.playerIds.length !== cap) {
+      nextErrors.players = `Select exactly ${cap} player${cap === 1 ? "" : "s"}`;
+    }
+    if (Object.keys(nextErrors).length) {
+      setScoreErrors(nextErrors);
+      return;
+    }
+
+    setScoreSaveError("");
+    setScoreSaving(true);
+    try {
+      const res = await fetch("/api/scores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: scoreForm.date,
+          courseName: scoreForm.courseName.trim(),
+          strokes: scoreForm.strokes.trim() || null,
+          scoreToPar: scoreForm.scoreToPar.trim() || null,
+          numPlayers: cap,
+          playerIds: scoreForm.playerIds,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not save score");
+      closeModal();
+    } catch (err) {
+      setScoreSaveError(err.message || "Something went wrong — try again.");
+    } finally {
+      setScoreSaving(false);
+    }
+  };
 
   const rows = [...GAMES].sort((a, b) => {
     const x = a[sort.key], y = b[sort.key];
@@ -215,7 +319,7 @@ export default function Home() {
       <section className="results">
         <div className="resultshead">
           <h2>Results</h2>
-          <button type="button" className="logscore">📝 Log a score</button>
+          <button type="button" className="logscore" onClick={() => openModal("logScore")}>📝 Log a score</button>
         </div>
         <div className="tablewrap">
           <table>
@@ -335,6 +439,108 @@ export default function Home() {
               <div className="modalactions">
                 <button type="button" className="cancel" onClick={closeModal} disabled={saving}>Cancel</button>
                 <button type="submit" className="save" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {modal === "logScore" && (
+        <div className="overlay" onClick={closeModal}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Log a score"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Log a Score</h2>
+            <form onSubmit={saveScore} noValidate>
+              <label>
+                Date *
+                <input type="date" value={scoreForm.date} onChange={setScoreField("date")} />
+              </label>
+              {scoreErrors.date && <span className="error">{scoreErrors.date}</span>}
+
+              <label className="autocomplete">
+                Course *
+                <input
+                  type="text"
+                  value={scoreForm.courseName}
+                  onChange={onCourseChange}
+                  onFocus={() => setCourseOpen(true)}
+                  autoComplete="off"
+                  placeholder="Start typing…"
+                />
+                {courseOpen && courseSuggestions.length > 0 && (
+                  <ul className="suggestions">
+                    {courseSuggestions.map((c) => (
+                      <li key={c.id} onClick={() => pickCourse(c.name)}>{c.name}</li>
+                    ))}
+                  </ul>
+                )}
+              </label>
+              {scoreErrors.courseName && <span className="error">{scoreErrors.courseName}</span>}
+
+              <div className="scoreinputs">
+                <label>
+                  Number of Strokes
+                  <input type="text" inputMode="numeric" value={scoreForm.strokes} onChange={setScoreField("strokes")} />
+                </label>
+                <label>
+                  Score (+/- par)
+                  <input type="text" value={scoreForm.scoreToPar} onChange={setScoreField("scoreToPar")} placeholder="e.g. -2, E, +3" />
+                </label>
+              </div>
+              {scoreErrors.score && <span className="error">{scoreErrors.score}</span>}
+
+              <label>
+                Number of Players *
+                <select value={scoreForm.numPlayers} onChange={onNumPlayersChange}>
+                  <option value="">Select…</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              </label>
+              {scoreErrors.numPlayers && <span className="error">{scoreErrors.numPlayers}</span>}
+
+              <div>
+                <p className="fieldlabel">
+                  Who Played *{scoreForm.numPlayers ? ` (${scoreForm.playerIds.length}/${scoreForm.numPlayers})` : ""}
+                </p>
+                {listLoading && <p className="muted">Loading players…</p>}
+                {!listLoading && playerList.length === 0 && (
+                  <p className="muted">No players yet — add one from the menu first.</p>
+                )}
+                {!listLoading && playerList.length > 0 && (
+                  <div className="playerchecks">
+                    {playerList.map((p) => {
+                      const checked = scoreForm.playerIds.includes(p.id);
+                      const cap = Number(scoreForm.numPlayers) || 0;
+                      const disabled = !checked && cap > 0 && scoreForm.playerIds.length >= cap;
+                      return (
+                        <label key={p.id} className={"checkrow" + (disabled ? " disabled" : "")}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() => toggleScorePlayer(p.id)}
+                          />
+                          {p.first_name}{p.surname ? ` ${p.surname}` : ""}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {scoreErrors.players && <span className="error">{scoreErrors.players}</span>}
+
+              {scoreSaveError && <span className="error">{scoreSaveError}</span>}
+
+              <div className="modalactions">
+                <button type="button" className="cancel" onClick={closeModal} disabled={scoreSaving}>Cancel</button>
+                <button type="submit" className="save" disabled={scoreSaving}>{scoreSaving ? "Saving…" : "Save"}</button>
               </div>
             </form>
           </div>

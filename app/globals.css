@@ -29,6 +29,18 @@ header p{margin:0;font:14px system-ui,sans-serif;opacity:.85}
 .modal form{display:flex;flex-direction:column;gap:14px}
 .modal label{display:flex;flex-direction:column;gap:6px;font:14px system-ui,sans-serif;color:var(--muted)}
 .modal input[type="text"]{font:16px system-ui,sans-serif;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.modal input[type="date"],.modal select{font:16px system-ui,sans-serif;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.autocomplete{position:relative}
+.suggestions{position:absolute;top:100%;left:0;right:0;margin:4px 0 0;padding:0;list-style:none;background:var(--card);border:1px solid var(--line);border-radius:10px;max-height:180px;overflow:auto;z-index:5;box-shadow:0 8px 20px rgba(0,0,0,.15)}
+.suggestions li{padding:10px 12px;font:14px system-ui,sans-serif;cursor:pointer;color:var(--ink)}
+.suggestions li:hover{background:var(--bg)}
+.scoreinputs{display:flex;gap:10px}
+.scoreinputs label{flex:1}
+.fieldlabel{margin:0 0 6px;font:14px system-ui,sans-serif;color:var(--muted)}
+.playerchecks{display:flex;flex-direction:column;gap:8px;max-height:160px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:10px}
+.checkrow{display:flex;align-items:center;gap:8px;font:14px system-ui,sans-serif;color:var(--ink)}
+.checkrow.disabled{opacity:.45}
+.checkrow input{width:18px;height:18px}
 .modal input[type="file"]{font:13px system-ui,sans-serif;color:var(--muted)}
 .preview{width:64px;height:64px;border-radius:50%;object-fit:cover;align-self:flex-start;border:1px solid var(--line)}
 .error{margin-top:-8px;color:#c0392b;font:12px system-ui,sans-serif}
