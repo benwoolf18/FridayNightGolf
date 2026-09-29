@@ -25,6 +25,8 @@ const fmtScore = (n) => (n > 0 ? `+${n}` : n === 0 ? "E" : String(n));
 
 const emptyForm = { firstName: "", surname: "", handicap: "", photo: "" };
 const emptyScoreForm = { date: "", courseName: "", strokes: "", scoreToPar: "", numPlayers: "", playerIds: [] };
+const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles"];
+const emptyRoundForm = { courseName: "", gameType: "", numTeams: "", teams: [] };
 
 export default function Home() {
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
@@ -46,6 +48,10 @@ export default function Home() {
   const [courseSuggestions, setCourseSuggestions] = useState([]);
   const [courseOpen, setCourseOpen] = useState(false);
   const courseTimer = useRef(null);
+  const [roundForm, setRoundForm] = useState(emptyRoundForm);
+  const [roundErrors, setRoundErrors] = useState({});
+  const [roundSaving, setRoundSaving] = useState(false);
+  const [roundSaveError, setRoundSaveError] = useState("");
 
   useEffect(() => {
     const close = (e) => {
@@ -69,6 +75,14 @@ export default function Home() {
       setScoreForm(emptyScoreForm);
       setScoreErrors({});
       setScoreSaveError("");
+      setCourseSuggestions([]);
+      setCourseOpen(false);
+      loadPlayers();
+    }
+    if (name === "startRound") {
+      setRoundForm(emptyRoundForm);
+      setRoundErrors({});
+      setRoundSaveError("");
       setCourseSuggestions([]);
       setCourseOpen(false);
       loadPlayers();
@@ -236,6 +250,94 @@ export default function Home() {
     }
   };
 
+  const onRoundCourseChange = (e) => {
+    const value = e.target.value;
+    setRoundForm((f) => ({ ...f, courseName: value }));
+    setCourseOpen(true);
+    if (courseTimer.current) clearTimeout(courseTimer.current);
+    if (value.trim().length < 3) {
+      setCourseSuggestions([]);
+      return;
+    }
+    courseTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/courses/search?q=${encodeURIComponent(value.trim())}`);
+        const data = await res.json();
+        if (res.ok) setCourseSuggestions(data);
+      } catch {
+        // silently ignore — worst case, no suggestions show
+      }
+    }, 300);
+  };
+
+  const pickRoundCourse = (name) => {
+    setRoundForm((f) => ({ ...f, courseName: name }));
+    setCourseSuggestions([]);
+    setCourseOpen(false);
+  };
+
+  const onNumTeamsChange = (e) => {
+    const n = Number(e.target.value) || 0;
+    setRoundForm((f) => ({
+      ...f,
+      numTeams: e.target.value,
+      teams: Array.from({ length: n }, (_, i) => f.teams[i] || []),
+    }));
+  };
+
+  const toggleTeamPlayer = (teamIdx, playerId) => {
+    setRoundForm((f) => ({
+      ...f,
+      teams: f.teams.map((team, i) =>
+        i !== teamIdx
+          ? team
+          : team.includes(playerId)
+          ? team.filter((id) => id !== playerId)
+          : [...team, playerId]
+      ),
+    }));
+  };
+
+  const saveRound = async (e) => {
+    e.preventDefault();
+    const nextErrors = {};
+    if (!roundForm.courseName.trim()) nextErrors.courseName = "Course is required";
+    if (!roundForm.gameType) nextErrors.gameType = "Game type is required";
+    if (!roundForm.numTeams) nextErrors.numTeams = "Number of teams is required";
+    const emptyTeams = roundForm.teams
+      .map((t, i) => (t.length === 0 ? i + 1 : null))
+      .filter(Boolean);
+    if (roundForm.numTeams && emptyTeams.length) {
+      nextErrors.teams = `Add at least one player to Team ${emptyTeams.join(", Team ")}`;
+    }
+    if (Object.keys(nextErrors).length) {
+      setRoundErrors(nextErrors);
+      return;
+    }
+
+    setRoundErrors({});
+    setRoundSaveError("");
+    setRoundSaving(true);
+    try {
+      const res = await fetch("/api/rounds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseName: roundForm.courseName.trim(),
+          gameType: roundForm.gameType,
+          teams: roundForm.teams,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not start round");
+      closeModal();
+    } catch (err) {
+      setRoundSaveError(err.message || "Something went wrong — try again.");
+    } finally {
+      setRoundSaving(false);
+    }
+  };
+
   const rows = [...GAMES].sort((a, b) => {
     const x = a[sort.key], y = b[sort.key];
     const r = typeof x === "string" ? x.localeCompare(y) : x - y;
@@ -295,7 +397,7 @@ export default function Home() {
             <li>Browse results by course or player</li>
           </ul>
           <div className="actions">
-            <button type="button">Start a new round</button>
+            <button type="button" onClick={() => openModal("startRound")}>Start a new round</button>
             <button type="button" className="secondary">View a current round</button>
           </div>
         </section>
@@ -541,6 +643,113 @@ export default function Home() {
               <div className="modalactions">
                 <button type="button" className="cancel" onClick={closeModal} disabled={scoreSaving}>Cancel</button>
                 <button type="submit" className="save" disabled={scoreSaving}>{scoreSaving ? "Saving…" : "Save"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {modal === "startRound" && (
+        <div className="overlay" onClick={closeModal}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Start a round"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Start a Round</h2>
+            <form onSubmit={saveRound} noValidate>
+              <label className="autocomplete">
+                Course *
+                <input
+                  type="text"
+                  value={roundForm.courseName}
+                  onChange={onRoundCourseChange}
+                  onFocus={() => setCourseOpen(true)}
+                  autoComplete="off"
+                  placeholder="Start typing…"
+                />
+                {courseOpen && courseSuggestions.length > 0 && (
+                  <ul className="suggestions">
+                    {courseSuggestions.map((c) => (
+                      <li key={c.id} onClick={() => pickRoundCourse(c.name)}>{c.name}</li>
+                    ))}
+                  </ul>
+                )}
+              </label>
+              {roundErrors.courseName && <span className="error">{roundErrors.courseName}</span>}
+
+              <label>
+                Game Type *
+                <select
+                  value={roundForm.gameType}
+                  onChange={(e) => setRoundForm((f) => ({ ...f, gameType: e.target.value }))}
+                >
+                  <option value="">Select…</option>
+                  {GAME_TYPES.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </label>
+              {roundErrors.gameType && <span className="error">{roundErrors.gameType}</span>}
+
+              <label>
+                Number of Teams *
+                <select value={roundForm.numTeams} onChange={onNumTeamsChange}>
+                  <option value="">Select…</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              </label>
+              {roundErrors.numTeams && <span className="error">{roundErrors.numTeams}</span>}
+
+              {roundForm.teams.map((team, teamIdx) => (
+                <div key={teamIdx} className="teamblock">
+                  <p className="fieldlabel">Team {teamIdx + 1} * ({team.length} selected)</p>
+                  {listLoading && <p className="muted">Loading players…</p>}
+                  {!listLoading && playerList.length === 0 && (
+                    <p className="muted">No players yet — add one from the menu first.</p>
+                  )}
+                  {!listLoading && playerList.length > 0 && (
+                    <div className="playerchecks">
+                      {playerList.map((p) => {
+                        const checked = team.includes(p.id);
+                        const otherTeam = roundForm.teams.findIndex((t, i) => i !== teamIdx && t.includes(p.id));
+                        const disabled = !checked && otherTeam !== -1;
+                        return (
+                          <label key={p.id} className={"checkrow" + (disabled ? " disabled" : "")}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={disabled}
+                              onChange={() => toggleTeamPlayer(teamIdx, p.id)}
+                            />
+                            {p.first_name}{p.surname ? ` ${p.surname}` : ""}
+                            {disabled ? ` (Team ${otherTeam + 1})` : ""}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {roundErrors.teams && <span className="error">{roundErrors.teams}</span>}
+
+              <div>
+                <p className="fieldlabel">Matchups</p>
+                <p className="muted">
+                  {roundForm.gameType
+                    ? `Matchups for ${roundForm.gameType} will be set up here once game types are built.`
+                    : "Pick a game type first — matchups depend on it."}
+                </p>
+              </div>
+
+              {roundSaveError && <span className="error">{roundSaveError}</span>}
+
+              <div className="modalactions">
+                <button type="button" className="cancel" onClick={closeModal} disabled={roundSaving}>Cancel</button>
+                <button type="submit" className="save" disabled={roundSaving}>{roundSaving ? "Starting…" : "Start round"}</button>
               </div>
             </form>
           </div>
