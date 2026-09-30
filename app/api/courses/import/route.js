@@ -23,10 +23,15 @@ export async function POST(request) {
         courses.length === 1 || c.name === club.name ? club.name : `${club.name} – ${c.name}`;
 
       const ins = await sql`
-        INSERT INTO courses (name, api_course_id, api_club_id, club_name, county, scorecard_loaded)
-        VALUES (${displayName}, ${c.id}, ${api_club_id}, ${club.name}, ${club.county}, TRUE)
-        ON CONFLICT (api_course_id) DO UPDATE SET scorecard_loaded = TRUE
-        RETURNING id`;
+  INSERT INTO courses (name, api_course_id, api_club_id, club_name, county, scorecard_loaded)
+  VALUES (${displayName}, ${c.id}, ${api_club_id}, ${club.name}, ${club.county}, TRUE)
+  ON CONFLICT (name) DO UPDATE SET
+    api_course_id = EXCLUDED.api_course_id,
+    api_club_id = EXCLUDED.api_club_id,
+    club_name = EXCLUDED.club_name,
+    county = EXCLUDED.county,
+    scorecard_loaded = TRUE
+  RETURNING id`;
       const courseId = ins.rows[0].id;
 
       for (const t of sc.tee_sets ?? []) {

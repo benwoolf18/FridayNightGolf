@@ -26,7 +26,7 @@ const fmtScore = (n) => (n > 0 ? `+${n}` : n === 0 ? "E" : String(n));
 const emptyForm = { firstName: "", surname: "", handicap: "", photo: "" };
 const emptyScoreForm = { date: "", courseName: "", strokes: "", scoreToPar: "", numPlayers: "", playerIds: [] };
 const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles"];
-const emptyRoundForm = { courseName: "", gameType: "", numTeams: "", teams: [] };
+const emptyRoundForm = { courseName: "", courseId: null, teeSetId: "", gameType: "", numTeams: "", teams: [] };
 
 export default function Home() {
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
@@ -52,6 +52,16 @@ export default function Home() {
   const [roundErrors, setRoundErrors] = useState({});
   const [roundSaving, setRoundSaving] = useState(false);
   const [roundSaveError, setRoundSaveError] = useState("");
+  const [remoteResults, setRemoteResults] = useState(null); // null = UK search not used yet
+  const [remoteBusy, setRemoteBusy] = useState(false);
+  const [remoteError, setRemoteError] = useState("");
+  const [teeSets, setTeeSets] = useState([]);
+  const resetRemote = () => {
+    setRemoteResults(null);
+    setRemoteBusy(false);
+    setRemoteError("");
+    setTeeSets([]);
+  };
 
   useEffect(() => {
     const close = (e) => {
@@ -77,6 +87,7 @@ export default function Home() {
       setScoreSaveError("");
       setCourseSuggestions([]);
       setCourseOpen(false);
+      resetRemote();
       loadPlayers();
     }
     if (name === "startRound") {
@@ -85,6 +96,7 @@ export default function Home() {
       setRoundSaveError("");
       setCourseSuggestions([]);
       setCourseOpen(false);
+      resetRemote();
       loadPlayers();
     }
   };
@@ -169,6 +181,8 @@ export default function Home() {
     const value = e.target.value;
     setScoreForm((f) => ({ ...f, courseName: value }));
     setCourseOpen(true);
+    setRemoteResults(null);
+    setRemoteError("");
     if (courseTimer.current) clearTimeout(courseTimer.current);
     if (value.trim().length < 3) {
       setCourseSuggestions([]);
@@ -252,8 +266,11 @@ export default function Home() {
 
   const onRoundCourseChange = (e) => {
     const value = e.target.value;
-    setRoundForm((f) => ({ ...f, courseName: value }));
+    setRoundForm((f) => ({ ...f, courseName: value, courseId: null, teeSetId: "" }));
+    setTeeSets([]);
     setCourseOpen(true);
+    setRemoteResults(null);
+    setRemoteError("");
     if (courseTimer.current) clearTimeout(courseTimer.current);
     if (value.trim().length < 3) {
       setCourseSuggestions([]);
@@ -270,10 +287,99 @@ export default function Home() {
     }, 300);
   };
 
-  const pickRoundCourse = (name) => {
-    setRoundForm((f) => ({ ...f, courseName: name }));
+  const pickRoundCourse = async (course) => {
+    setRoundForm((f) => ({ ...f, courseName: course.name, courseId: course.id, teeSetId: "" }));
     setCourseSuggestions([]);
     setCourseOpen(false);
+    setRemoteResults(null);
+    setTeeSets([]);
+    try {
+      const res = await fetch(`/api/courses/${course.id}`);
+      const data = await res.json();
+      const tees = res.ok ? data.tee_sets || [] : [];
+      setTeeSets(tees);
+      if (tees.length === 1) {
+        setRoundForm((f) => ({ ...f, teeSetId: String(tees[0].id) }));
+      }
+    } catch {
+      // no tees is fine — the round can still be started without them
+    }
+  };
+
+  // --- UK course lookup (spends API requests, so only runs on a tap) ---
+  const remoteSearch = async (q) => {
+    setRemoteBusy(true);
+    setRemoteError("");
+    try {
+      const res = await fetch(`/api/courses/remote-search?q=${encodeURIComponent(q.trim())}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not search UK courses");
+      setRemoteResults(data);
+    } catch (err) {
+      setRemoteError(err.message || "Could not search UK courses");
+    } finally {
+      setRemoteBusy(false);
+    }
+  };
+
+  const importClub = async (club) => {
+    setRemoteBusy(true);
+    setRemoteError("");
+    try {
+      const res = await fetch("/api/courses/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_club_id: club.api_club_id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not import course");
+      const saved = data.courses || [];
+      setRemoteResults(null);
+      if (saved.length === 0) {
+        setRemoteError("No scorecard data available for that club");
+      } else if (saved.length === 1) {
+        if (modal === "startRound") pickRoundCourse(saved[0]);
+        else pickCourse(saved[0].name);
+      } else {
+        // several courses at one club — let the user choose which
+        setCourseSuggestions(saved);
+        setCourseOpen(true);
+      }
+    } catch (err) {
+      setRemoteError(err.message || "Could not import course");
+    } finally {
+      setRemoteBusy(false);
+    }
+  };
+
+  const renderCourseDropdown = (value, onPick) => {
+    const q = value.trim();
+    if (!courseOpen || q.length < 3) return null;
+    const note = { fontStyle: "italic", cursor: "default" };
+    return (
+      <ul className="suggestions">
+        {remoteResults === null &&
+          courseSuggestions.map((c) => (
+            <li key={c.id} onClick={() => onPick(c)}>{c.name}</li>
+          ))}
+        {remoteResults !== null &&
+          remoteResults.map((c) => (
+            <li key={c.api_club_id} onClick={() => importClub(c)}>
+              {c.name}{c.county ? ` — ${c.county}` : ""}
+            </li>
+          ))}
+        {remoteResults !== null && remoteResults.length === 0 && (
+          <li style={note}>No UK clubs found</li>
+        )}
+        {remoteBusy && <li style={note}>Working…</li>}
+        {remoteError && <li style={{ ...note, color: "#b00020" }}>{remoteError}</li>}
+        {remoteResults === null && !remoteBusy && (
+          <li style={{ fontStyle: "italic" }} onClick={() => remoteSearch(q)}>
+            🔎 Search UK courses for “{q}”
+          </li>
+        )}
+      </ul>
+    );
   };
 
   const onNumTeamsChange = (e) => {
@@ -325,6 +431,7 @@ export default function Home() {
         body: JSON.stringify({
           courseName: roundForm.courseName.trim(),
           gameType: roundForm.gameType,
+          teeSetId: roundForm.teeSetId ? Number(roundForm.teeSetId) : null,
           teams: roundForm.teams,
         }),
       });
@@ -573,13 +680,7 @@ export default function Home() {
                   autoComplete="off"
                   placeholder="Start typing…"
                 />
-                {courseOpen && courseSuggestions.length > 0 && (
-                  <ul className="suggestions">
-                    {courseSuggestions.map((c) => (
-                      <li key={c.id} onClick={() => pickCourse(c.name)}>{c.name}</li>
-                    ))}
-                  </ul>
-                )}
+                {renderCourseDropdown(scoreForm.courseName, (c) => pickCourse(c.name))}
               </label>
               {scoreErrors.courseName && <span className="error">{scoreErrors.courseName}</span>}
 
@@ -669,15 +770,27 @@ export default function Home() {
                   autoComplete="off"
                   placeholder="Start typing…"
                 />
-                {courseOpen && courseSuggestions.length > 0 && (
-                  <ul className="suggestions">
-                    {courseSuggestions.map((c) => (
-                      <li key={c.id} onClick={() => pickRoundCourse(c.name)}>{c.name}</li>
-                    ))}
-                  </ul>
-                )}
+                {renderCourseDropdown(roundForm.courseName, (c) => pickRoundCourse(c))}
               </label>
               {roundErrors.courseName && <span className="error">{roundErrors.courseName}</span>}
+
+              {teeSets.length > 0 && (
+                <label>
+                  Tees
+                  <select
+                    value={roundForm.teeSetId}
+                    onChange={(e) => setRoundForm((f) => ({ ...f, teeSetId: e.target.value }))}
+                  >
+                    <option value="">Select…</option>
+                    {teeSets.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}{t.gender ? ` (${t.gender})` : ""} – par {t.par}
+                        {t.slope_rating ? `, slope ${t.slope_rating}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               <label>
                 Game Type *
