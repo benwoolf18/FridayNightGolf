@@ -329,7 +329,7 @@ export default function Home() {
       const res = await fetch("/api/courses/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_club_id: club.api_club_id }),
+        body: JSON.stringify({ api_club_id: club.api_club_id, club_name: club.name, county: club.county }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not import course");

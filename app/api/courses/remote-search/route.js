@@ -10,7 +10,7 @@ export async function GET(request) {
     const data = await golfApi(`/clubs?search=${encodeURIComponent(q)}`);
     const list = Array.isArray(data) ? data : data.items ?? [];
     return NextResponse.json(
-      list.slice(0, 10).map((c) => ({ api_club_id: c.id, name: c.name, county: c.county }))
+      list.slice(0, 10).map((c) => ({ api_club_id: c.id, name: c.name, county: c.address?.county ?? c.county }))
     );
   } catch (err) {
     console.error("GET /api/courses/remote-search failed:", err);
