@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { golfApi } from "@/lib/golfApi";
+import { golfApi } from "../../../../lib/golfApi";
 
 // GET /api/courses/remote-search?q=shrivenham — spends 1 API request
 export async function GET(request) {

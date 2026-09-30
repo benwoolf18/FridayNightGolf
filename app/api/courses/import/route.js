@@ -1,6 +1,6 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
-import { golfApi } from "@/lib/golfApi";
+import { golfApi } from "../../../../lib/golfApi";
 
 // POST /api/courses/import  { api_club_id } — stores the club's courses, tees and holes
 export async function POST(request) {
