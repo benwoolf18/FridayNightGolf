@@ -28,6 +28,51 @@ const emptyScoreForm = { date: "", courseName: "", strokes: "", scoreToPar: "", 
 const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles"];
 const emptyRoundForm = { courseName: "", courseId: null, teeSetId: "", gameType: "", numTeams: "", teams: [] };
 
+function ScorecardPreview({ tee }) {
+  const holes = [...tee.holes].sort((a, b) => a.hole_number - b.hole_number);
+  const blocks = [];
+  for (let i = 0; i < holes.length; i += 9) blocks.push(holes.slice(i, i + 9));
+  const sum = (hs) => hs.reduce((n, h) => n + (h.par || 0), 0);
+  const cell = { padding: "4px 6px", textAlign: "center", border: "1px solid rgba(0,0,0,0.18)", fontSize: 12 };
+  const head = { ...cell, fontWeight: 600 };
+  const totLabel = (bi) => (blocks.length > 1 ? (bi === 0 ? "Out" : "In") : "Tot");
+  return (
+    <div style={{ margin: "8px 0 12px" }}>
+      <div style={{ fontSize: 12, marginBottom: 4 }}>
+        {tee.name} · par {sum(holes)}
+        {tee.slope_rating ? ` · slope ${tee.slope_rating}` : ""}
+        {tee.course_rating ? ` · rating ${tee.course_rating}` : ""}
+      </div>
+      {blocks.map((hs, bi) => (
+        <div key={bi} style={{ overflowX: "auto", marginBottom: 8 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+            <tbody>
+              <tr>
+                <td style={head}>Hole</td>
+                {hs.map((h) => <td key={h.hole_number} style={head}>{h.hole_number}</td>)}
+                <td style={head}>{totLabel(bi)}</td>
+              </tr>
+              <tr>
+                <td style={head}>Par</td>
+                {hs.map((h) => <td key={h.hole_number} style={cell}>{h.par}</td>)}
+                <td style={head}>{sum(hs)}</td>
+              </tr>
+              <tr>
+                <td style={head}>SI</td>
+                {hs.map((h) => <td key={h.hole_number} style={cell}>{h.stroke_index ?? "–"}</td>)}
+                <td style={cell}></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ))}
+      {blocks.length > 1 && (
+        <div style={{ fontSize: 12 }}>Total par {sum(holes)}</div>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
   const [openId, setOpenId] = useState(null);
@@ -329,7 +374,7 @@ export default function Home() {
       const res = await fetch("/api/courses/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_club_id: club.api_club_id, club_name: club.name, county: club.county }),
+        body: JSON.stringify({ api_club_id: club.api_club_id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not import course");
@@ -791,6 +836,10 @@ export default function Home() {
                   </select>
                 </label>
               )}
+              {(() => {
+                const tee = teeSets.find((t) => String(t.id) === String(roundForm.teeSetId));
+                return tee && tee.holes?.length ? <ScorecardPreview tee={tee} /> : null;
+              })()}
 
               <label>
                 Game Type *
