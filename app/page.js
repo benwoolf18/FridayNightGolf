@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 // Demo data - will be replaced by real records later
 const GAMES = [
@@ -25,7 +25,7 @@ const fmtScore = (n) => (n > 0 ? `+${n}` : n === 0 ? "E" : String(n));
 
 const emptyForm = { firstName: "", surname: "", handicap: "", photo: "" };
 const emptyScoreForm = { date: "", courseName: "", strokes: "", scoreToPar: "", numPlayers: "", playerIds: [] };
-const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles"];
+const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles", "Stroke Play"];
 const emptyRoundForm = { courseName: "", courseId: null, teeSetId: "", gameType: "", numTeams: "", teams: [] };
 
 function ScorecardPreview({ tee }) {
@@ -73,6 +73,257 @@ function ScorecardPreview({ tee }) {
   );
 }
 
+const GREEN = "#1f472e";
+const ECRU = "#f3edd9";
+
+function LiveRound({ roundId, onClose }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [scores, setScores] = useState({}); // "playerId-hole" -> string
+  const [saveError, setSaveError] = useState("");
+  const [ending, setEnding] = useState(false);
+  const pending = useRef(new Set());
+  const savedRef = useRef({});
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/rounds/${roundId}`);
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || "Could not load round");
+        if (!alive) return;
+        const map = {};
+        for (const sc of d.scores) map[`${sc.player_id}-${sc.hole_number}`] = String(sc.strokes);
+        savedRef.current = { ...map };
+        setScores(map);
+        setData(d);
+      } catch (err) {
+        if (alive) setError(err.message || "Could not load round");
+      }
+    })();
+    return () => { alive = false; };
+  }, [roundId]);
+
+  const saveScore = (playerId, hole) => {
+    const key = `${playerId}-${hole}`;
+    const raw = (scores[key] ?? "").trim();
+    const n = raw === "" ? null : Number(raw);
+    const next = n && n > 0 ? String(n) : "";
+    const prev = savedRef.current[key] ?? "";
+    if (next !== raw) setScores((sc) => ({ ...sc, [key]: next }));
+    if (next === prev) return;
+    savedRef.current[key] = next;
+    const p = fetch(`/api/rounds/${roundId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "score", playerId, hole, strokes: next === "" ? null : Number(next) }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.error || "Could not save score");
+        }
+        setSaveError("");
+      })
+      .catch((err) => {
+        savedRef.current[key] = prev;
+        setSaveError(err.message || "Could not save score — check your connection");
+      })
+      .finally(() => pending.current.delete(p));
+    pending.current.add(p);
+  };
+
+  const endRound = async () => {
+    if (!window.confirm("End this round? It will be marked as complete.")) return;
+    setEnding(true);
+    setSaveError("");
+    try {
+      await Promise.all([...pending.current]);
+      const res = await fetch(`/api/rounds/${roundId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "end" }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Could not end round");
+      onClose();
+    } catch (err) {
+      setSaveError(err.message || "Could not end round");
+      setEnding(false);
+    }
+  };
+
+  const wrap = { padding: "16px 12px 48px", maxWidth: 960, margin: "0 auto" };
+  const backBtn = { background: "transparent", border: "none", color: GREEN, font: "inherit", cursor: "pointer", padding: 0 };
+
+  if (error) {
+    return (
+      <div style={wrap}>
+        <button type="button" onClick={onClose} style={backBtn}>← Home</button>
+        <p className="error" style={{ marginTop: 16 }}>{error}</p>
+      </div>
+    );
+  }
+  if (!data) {
+    return (
+      <div style={wrap}>
+        <button type="button" onClick={onClose} style={backBtn}>← Home</button>
+        <p style={{ marginTop: 16 }}>Loading round…</p>
+      </div>
+    );
+  }
+
+  const { round, tee } = data;
+  const live = round.status === "in_progress";
+  const players = data.teams.flatMap((t) => t.players.map((p) => ({ ...p, team: t.team_number })));
+  const teamGroups = data.teams
+    .filter((t) => t.players.length)
+    .map((t) => ({ team: t.team_number, count: t.players.length }));
+  const holes = data.holes.length
+    ? data.holes
+    : Array.from({ length: 18 }, (_, i) => ({ hole_number: i + 1, par: null, stroke_index: null }));
+
+  const strokesAt = (pid, n) => {
+    const v = Number(scores[`${pid}-${n}`]);
+    return v > 0 ? v : 0;
+  };
+  const sumFor = (pid, hs) => hs.reduce((t, h) => t + strokesAt(pid, h.hole_number), 0);
+  const parOf = (hs) => hs.reduce((t, h) => t + (h.par || 0), 0);
+  const toParFor = (pid) => {
+    let diff = 0;
+    let any = false;
+    for (const h of holes) {
+      const st = strokesAt(pid, h.hole_number);
+      if (st && h.par) { diff += st - h.par; any = true; }
+    }
+    return any ? diff : null;
+  };
+
+  const cell = { padding: "4px 6px", textAlign: "center", border: "1px solid rgba(0,0,0,0.18)", fontSize: 13 };
+  const head = { ...cell, fontWeight: 600, background: GREEN, color: ECRU };
+  const stickyCell = { ...cell, fontWeight: 600, position: "sticky", left: 0, background: ECRU };
+  const subCell = { ...cell, fontWeight: 600, background: "rgba(31,71,46,0.12)" };
+  const subSticky = { ...subCell, position: "sticky", left: 0, background: "#dfe6d6" };
+  const colCount = 3 + players.length;
+
+  const subtotalRow = (label, hs, key) => (
+    <tr key={key}>
+      <td style={subSticky}>{label}</td>
+      <td style={subCell}>{hs.some((h) => h.par) ? parOf(hs) : ""}</td>
+      <td style={subCell}></td>
+      {players.map((p) => (
+        <td key={p.id} style={subCell}>{sumFor(p.id, hs) || ""}</td>
+      ))}
+    </tr>
+  );
+
+  return (
+    <div style={wrap}>
+      <button type="button" onClick={onClose} style={backBtn}>← Home</button>
+      <h1 style={{ fontSize: 22, margin: "8px 0 4px", color: GREEN }}>{round.title}</h1>
+      <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 12 }}>
+        {tee
+          ? `${tee.name}${tee.gender ? ` (${tee.gender})` : ""} tees · par ${parOf(holes)}${tee.slope_rating ? ` · slope ${tee.slope_rating}` : ""}`
+          : "No scorecard for this course — scores only"}
+      </div>
+      {!live && (
+        <p style={{ fontWeight: 600, color: GREEN }}>This round has ended.</p>
+      )}
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "separate", borderSpacing: 0, minWidth: "100%" }}>
+          <thead>
+            <tr>
+              <th colSpan={3} style={{ ...head, background: "transparent", border: "none" }}></th>
+              {teamGroups.map((g) => (
+                <th key={g.team} colSpan={g.count} style={head}>Team {g.team}</th>
+              ))}
+            </tr>
+            <tr>
+              <th style={head}>Hole</th>
+              <th style={head}>Par</th>
+              <th style={head}>SI</th>
+              {players.map((p) => (
+                <th key={p.id} style={head}>{p.first_name}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {holes.map((h, i) => {
+              const blockIdx = Math.floor(i / 9);
+              const blockEnd = (i + 1) % 9 === 0 || i === holes.length - 1;
+              const block = holes.slice(blockIdx * 9, blockIdx * 9 + 9);
+              const label = holes.length > 9 ? (blockIdx === 0 ? "Out" : "In") : "Tot";
+              return (
+                <Fragment key={h.hole_number}>
+                  <tr>
+                    <td style={stickyCell}>{h.hole_number}</td>
+                    <td style={cell}>{h.par ?? "–"}</td>
+                    <td style={cell}>{h.stroke_index ?? "–"}</td>
+                    {players.map((p) => {
+                      const key = `${p.id}-${h.hole_number}`;
+                      return (
+                        <td key={p.id} style={cell}>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={2}
+                            aria-label={`${p.first_name}, hole ${h.hole_number}`}
+                            value={scores[key] ?? ""}
+                            readOnly={!live}
+                            onChange={(e) =>
+                              setScores((sc) => ({ ...sc, [key]: e.target.value.replace(/\D/g, "").slice(0, 2) }))
+                            }
+                            onBlur={() => saveScore(p.id, h.hole_number)}
+                            style={{
+                              width: 44, textAlign: "center", font: "inherit", padding: "6px 0",
+                              border: "1px solid rgba(0,0,0,0.25)", borderRadius: 6, background: "#fffdf5",
+                            }}
+                          />
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  {blockEnd && subtotalRow(label, block, `sub-${blockIdx}`)}
+                </Fragment>
+              );
+            })}
+            {holes.length > 9 && subtotalRow("Total", holes, "total")}
+            <tr>
+              <td style={stickyCell}>To par</td>
+              <td style={cell}></td>
+              <td style={cell}></td>
+              {players.map((p) => {
+                const d = toParFor(p.id);
+                return <td key={p.id} style={{ ...cell, fontWeight: 600 }}>{d === null ? "" : fmtScore(d)}</td>;
+              })}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {saveError && <p className="error" style={{ marginTop: 12 }}>{saveError}</p>}
+
+      {live && (
+        <button
+          type="button"
+          onClick={endRound}
+          disabled={ending}
+          style={{
+            marginTop: 20, width: "100%", padding: "14px 18px", border: "none", borderRadius: 10,
+            background: GREEN, color: ECRU, font: "inherit", fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          {ending ? "Ending…" : "End round"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
   const [openId, setOpenId] = useState(null);
@@ -101,6 +352,28 @@ export default function Home() {
   const [remoteBusy, setRemoteBusy] = useState(false);
   const [remoteError, setRemoteError] = useState("");
   const [teeSets, setTeeSets] = useState([]);
+  const [liveRoundId, setLiveRoundId] = useState(null);
+  const [activeRounds, setActiveRounds] = useState([]);
+  const [activeLoading, setActiveLoading] = useState(false);
+  const [activeError, setActiveError] = useState("");
+  const loadActiveRounds = async () => {
+    setActiveLoading(true);
+    setActiveError("");
+    try {
+      const res = await fetch("/api/rounds/active");
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Could not load rounds");
+      setActiveRounds(d);
+    } catch (err) {
+      setActiveError(err.message || "Could not load rounds");
+    } finally {
+      setActiveLoading(false);
+    }
+  };
+  const openRound = (id) => {
+    setModal(null);
+    setLiveRoundId(id);
+  };
   const resetRemote = () => {
     setRemoteResults(null);
     setRemoteBusy(false);
@@ -126,6 +399,7 @@ export default function Home() {
     setErrors({});
     setSaveError("");
     if (name === "viewPlayers") loadPlayers();
+    if (name === "currentRounds") loadActiveRounds();
     if (name === "logScore") {
       setScoreForm(emptyScoreForm);
       setScoreErrors({});
@@ -470,11 +744,12 @@ export default function Home() {
     setRoundSaveError("");
     setRoundSaving(true);
     try {
-      const res = await fetch("/api/rounds", {
+      const res = await fetch("/api/rounds/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseName: roundForm.courseName.trim(),
+          courseId: roundForm.courseId,
           gameType: roundForm.gameType,
           teeSetId: roundForm.teeSetId ? Number(roundForm.teeSetId) : null,
           teams: roundForm.teams,
@@ -483,6 +758,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not start round");
       closeModal();
+      setLiveRoundId(data.id);
     } catch (err) {
       setRoundSaveError(err.message || "Something went wrong — try again.");
     } finally {
@@ -513,6 +789,10 @@ export default function Home() {
       </th>
     );
   };
+
+  if (liveRoundId) {
+    return <LiveRound roundId={liveRoundId} onClose={() => setLiveRoundId(null)} />;
+  }
 
   return (
     <>
@@ -550,7 +830,7 @@ export default function Home() {
           </ul>
           <div className="actions">
             <button type="button" onClick={() => openModal("startRound")}>Start a new round</button>
-            <button type="button" className="secondary">View a current round</button>
+            <button type="button" className="secondary" onClick={() => openModal("currentRounds")}>View a current round</button>
           </div>
         </section>
 
@@ -609,6 +889,50 @@ export default function Home() {
       </section>
 
       <footer>Demo data</footer>
+
+      {modal === "currentRounds" && (
+        <div className="overlay" onClick={closeModal}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Current rounds"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Current Rounds</h2>
+
+            {activeLoading && <p className="muted">Loading rounds…</p>}
+            {activeError && <span className="error">{activeError}</span>}
+
+            {!activeLoading && !activeError && (
+              activeRounds.length === 0 ? (
+                <p className="muted">No rounds in progress.</p>
+              ) : (
+                <div>
+                  {activeRounds.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => openRound(r.id)}
+                      style={{
+                        display: "block", width: "100%", textAlign: "left", padding: "10px 12px",
+                        marginBottom: 8, border: "1px solid rgba(0,0,0,0.18)", borderRadius: 8,
+                        background: "transparent", cursor: "pointer", font: "inherit", color: "inherit",
+                      }}
+                    >
+                      {r.title}
+                    </button>
+                  ))}
+                </div>
+              )
+            )}
+
+            <div className="modalactions">
+              <button type="button" className="cancel" onClick={closeModal}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal === "viewPlayers" && (
         <div className="overlay" onClick={closeModal}>
