@@ -360,7 +360,7 @@ export default function Home() {
     setActiveLoading(true);
     setActiveError("");
     try {
-      const res = await fetch("/api/rounds/active", { cache: "no-store" });
+      const res = await fetch(`/api/rounds/active?t=${Date.now()}`, { cache: "no-store" });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Could not load rounds");
       setActiveRounds(d);
@@ -920,7 +920,7 @@ export default function Home() {
                         background: "transparent", cursor: "pointer", font: "inherit", color: "inherit",
                       }}
                     >
-                      {r.title}
+                      {r.title} <span style={{ opacity: 0.5, fontSize: 12 }}>· id {r.id}</span>
                     </button>
                   ))}
                 </div>
