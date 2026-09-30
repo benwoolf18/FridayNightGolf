@@ -10,10 +10,16 @@ export async function POST(request) {
     const { api_club_id } = await request.json();
     const club = await golfApi(`/clubs/${api_club_id}`);
     const clubName = club.name;
-    const county = club.address?.county ?? null;
-    const courses = club.courses ?? [];
-    const saved = [];
+    const county = club.county ?? club.address?.county ?? null;
 
+    let courses = club.courses ?? [];
+    if (!courses.some((c) => c.tee_sets?.length)) {
+      const cc = await golfApi(`/clubs/${api_club_id}/courses`);
+      const list = Array.isArray(cc) ? cc : cc.courses ?? cc.items ?? [];
+      if (list.length) courses = list;
+    }
+
+    const saved = [];
     for (const c of courses) {
       const existing = await sql`
         SELECT id, name, scorecard_loaded FROM courses WHERE api_course_id = ${c.id}`;
@@ -29,7 +35,8 @@ export async function POST(request) {
         const g = t.gender || "unknown";
         if (holesByGender[g]) continue;
         const sc = await golfApi(`/courses/${c.id}/scorecard?tee_id=${encodeURIComponent(t.id)}`);
-        holesByGender[g] = sc.holes ?? [];
+        holesByGender[g] =
+          sc.holes ?? sc.tee_sets?.find((x) => x.id === t.id)?.holes ?? sc.tee_sets?.[0]?.holes ?? [];
       }
 
       const displayName =
@@ -46,7 +53,6 @@ export async function POST(request) {
         RETURNING id`;
       const courseId = ins.rows[0].id;
 
-      // clear any half-finished earlier attempt
       await sql`DELETE FROM course_tee_sets WHERE course_id = ${courseId}`;
 
       for (const t of teeSets) {
