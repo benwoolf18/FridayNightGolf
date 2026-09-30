@@ -61,3 +61,42 @@ CREATE TABLE IF NOT EXISTS round_team_players (
   player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   PRIMARY KEY (round_id, player_id)
 );
+ALTER TABLE courses
+  ADD COLUMN IF NOT EXISTS api_course_id TEXT UNIQUE,
+  ADD COLUMN IF NOT EXISTS api_club_id TEXT,
+  ADD COLUMN IF NOT EXISTS club_name TEXT,
+  ADD COLUMN IF NOT EXISTS county TEXT,
+  ADD COLUMN IF NOT EXISTS scorecard_loaded BOOLEAN DEFAULT FALSE;
+
+  CREATE TABLE IF NOT EXISTS courses (
+  id SERIAL PRIMARY KEY,
+  api_course_id TEXT UNIQUE NOT NULL,
+  api_club_id TEXT,
+  club_name TEXT NOT NULL,
+  course_name TEXT NOT NULL,
+  county TEXT,
+  scorecard_loaded BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS course_tee_sets (
+  id SERIAL PRIMARY KEY,
+  course_id INT REFERENCES courses(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  gender TEXT,
+  par INT,
+  slope_rating INT,
+  course_rating NUMERIC(4,1)
+);
+
+CREATE TABLE IF NOT EXISTS course_holes (
+  id SERIAL PRIMARY KEY,
+  tee_set_id INT REFERENCES course_tee_sets(id) ON DELETE CASCADE,
+  hole_number INT NOT NULL,
+  par INT NOT NULL,
+  stroke_index INT
+);
+
+CREATE TABLE IF NOT EXISTS api_usage (
+  month TEXT PRIMARY KEY,
+  calls INT DEFAULT 0
+);
