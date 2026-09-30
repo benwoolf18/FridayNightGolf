@@ -90,7 +90,7 @@ function LiveRound({ roundId, onClose }) {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`/api/rounds/${roundId}`);
+        const res = await fetch(`/api/rounds/${roundId}`, { cache: "no-store" });
         const d = await res.json();
         if (!res.ok) throw new Error(d.error || "Could not load round");
         if (!alive) return;
@@ -360,7 +360,7 @@ export default function Home() {
     setActiveLoading(true);
     setActiveError("");
     try {
-      const res = await fetch("/api/rounds/active");
+      const res = await fetch("/api/rounds/active", { cache: "no-store" });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Could not load rounds");
       setActiveRounds(d);

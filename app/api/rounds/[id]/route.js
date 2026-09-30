@@ -50,9 +50,10 @@ export async function GET(request, { params }) {
     const sc = await sql`
       SELECT player_id, hole_number, strokes FROM round_scores WHERE round_id = ${id}`;
 
-    return NextResponse.json({
-      round, tee, holes, teams: [...teamMap.values()], scores: sc.rows,
-    });
+    return NextResponse.json(
+      { round, tee, holes, teams: [...teamMap.values()], scores: sc.rows },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
     console.error("GET /api/rounds/[id] failed:", err);
     return NextResponse.json({ error: "Could not load round" }, { status: 500 });

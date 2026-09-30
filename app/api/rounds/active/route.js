@@ -16,7 +16,8 @@ export async function GET() {
         id: r.id,
         title: r.title || `${r.course_name} – ${r.game_type}`,
         played_date: r.played_date,
-      }))
+      })),
+      { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
     console.error("GET /api/rounds/active failed:", err);
