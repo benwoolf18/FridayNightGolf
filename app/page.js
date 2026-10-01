@@ -12,7 +12,8 @@ const GAMES = [
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DEFAULT_DIR = { date: "desc", course: "asc", gameType: "asc", score: "asc" };
-const emptyFilters = { course: "", gameType: "", players: "", scoreMin: "", scoreMax: "" };
+const emptyFilters = { course: "", gameType: "", players: "" };
+const todayISO = () => new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" });
 
 function ordinal(n) {
   const s = ["th", "st", "nd", "rd"], v = n % 100;
@@ -22,10 +23,14 @@ const fmtDate = (iso) => {
   const [, m, d] = iso.split("-");
   return `${ordinal(+d)} ${MONTHS[+m - 1]}`;
 };
+const fmtLongDate = (iso) => {
+  const [y, m, d] = iso.split("-");
+  return `${ordinal(+d)} ${MONTHS[+m - 1]} ${y}`;
+};
 const fmtScore = (n) => (n > 0 ? `+${n}` : n === 0 ? "E" : String(n));
 
 const emptyForm = { firstName: "", surname: "", handicap: "", photo: "" };
-const emptyScoreForm = { date: "", courseName: "", strokes: "", scoreToPar: "", numPlayers: "", playerIds: [] };
+const emptyScoreForm = { date: "", courseName: "", gameType: "", strokes: "", scoreToPar: "", numPlayers: "", playerIds: [] };
 const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles", "Stroke Play"];
 // Player/team rules per game type
 const GAME_RULES = {
@@ -36,8 +41,8 @@ const GAME_RULES = {
   "Fourball": { mode: "teams", minTeams: 2, maxTeams: 2, minPerTeam: 2 },
   "Gruesomes": { mode: "teams", minTeams: 2, maxTeams: 2, minPerTeam: 2 },
 };
-const emptyTournamentForm = { name: "", teamAName: "", teamBName: "", teamA: [], teamB: [] };
-const emptyRoundForm = { courseName: "", courseId: null, teeSetId: "", gameType: "", teams: [], players: [] };
+const emptyTournamentForm = { name: "", date: "", teamAName: "", teamBName: "", teamA: [], teamB: [] };
+const emptyRoundForm = { date: "", courseName: "", courseId: null, teeSetId: "", gameType: "", teams: [], players: [] };
 
 function ScorecardPreview({ tee }) {
   const holes = [...tee.holes].sort((a, b) => a.hole_number - b.hole_number);
@@ -374,7 +379,8 @@ function TournamentHome({ tournamentId, onClose }) {
   return (
     <div style={wrap}>
       <button type="button" onClick={onClose} style={backBtn}>← Home</button>
-      <h1 style={{ fontSize: 24, margin: "8px 0 14px", color: GREEN }}>{tournament.name}</h1>
+      <h1 style={{ fontSize: 24, margin: "8px 0 4px", color: GREEN }}>{tournament.name}</h1>
+      {tournament.played_date && <p className="muted" style={{ margin: "0 0 14px" }}>{fmtLongDate(tournament.played_date)}</p>}
 
       <div className="tourteams">
         {teams.map((t) => (
@@ -488,13 +494,13 @@ export default function Home() {
       loadPlayers();
     }
     if (name === "startTournament") {
-      setTournamentForm(emptyTournamentForm);
+      setTournamentForm({ ...emptyTournamentForm, date: todayISO() });
       setTournamentErrors({});
       setTournamentSaveError("");
       loadPlayers();
     }
     if (name === "startRound") {
-      setRoundForm(emptyRoundForm);
+      setRoundForm({ ...emptyRoundForm, date: todayISO() });
       setRoundErrors({});
       setRoundSaveError("");
       setCourseSuggestions([]);
@@ -630,6 +636,7 @@ export default function Home() {
     const nextErrors = {};
     if (!scoreForm.date) nextErrors.date = "Date is required";
     if (!scoreForm.courseName.trim()) nextErrors.courseName = "Course is required";
+    if (!scoreForm.gameType) nextErrors.gameType = "Game type is required";
     if (!scoreForm.numPlayers) nextErrors.numPlayers = "Number of players is required";
     if (!scoreForm.strokes.trim() && !scoreForm.scoreToPar.trim()) {
       nextErrors.score = "Enter either Number of Strokes or Score";
@@ -651,6 +658,7 @@ export default function Home() {
         body: JSON.stringify({
           date: scoreForm.date,
           courseName: scoreForm.courseName.trim(),
+          gameType: scoreForm.gameType,
           strokes: scoreForm.strokes.trim() || null,
           scoreToPar: scoreForm.scoreToPar.trim() || null,
           numPlayers: cap,
@@ -860,6 +868,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: f.name.trim(),
+          date: f.date || todayISO(),
           teams: [
             { name: f.teamAName.trim(), players: f.teamA },
             { name: f.teamBName.trim(), players: f.teamB },
@@ -917,6 +926,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          date: roundForm.date || todayISO(),
           courseName: roundForm.courseName.trim(),
           courseId: roundForm.courseId,
           gameType: roundForm.gameType,
@@ -939,22 +949,16 @@ export default function Home() {
   const gameTypeOptions = [...new Set(GAMES.map((g) => g.gameType))].sort((a, b) => a.localeCompare(b));
   const playerCountOptions = [...new Set(GAMES.map((g) => g.players.length))].sort((a, b) => a - b);
 
-  const parseScore = (v) => (/^[+-]?\d+$/.test(v.trim()) ? Number(v.trim()) : null);
-  const minScore = parseScore(filters.scoreMin);
-  const maxScore = parseScore(filters.scoreMax);
   const activeFilterCount =
     (filters.course ? 1 : 0) +
     (filters.gameType ? 1 : 0) +
-    (filters.players ? 1 : 0) +
-    (minScore !== null || maxScore !== null ? 1 : 0);
+    (filters.players ? 1 : 0);
 
   const filteredGames = GAMES.filter(
     (g) =>
       (!filters.course || g.course === filters.course) &&
       (!filters.gameType || g.gameType === filters.gameType) &&
-      (!filters.players || g.players.length === Number(filters.players)) &&
-      (minScore === null || g.score >= minScore) &&
-      (maxScore === null || g.score <= maxScore)
+      (!filters.players || g.players.length === Number(filters.players))
   );
   const setFilter = (key) => (e) => setFilters((f) => ({ ...f, [key]: e.target.value }));
 
@@ -1084,16 +1088,6 @@ export default function Home() {
                 {playerCountOptions.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
-            <div className="scorefilter">
-              <label>
-                Score from
-                <input type="text" inputMode="text" autoComplete="off" placeholder="e.g. -5" value={filters.scoreMin} onChange={setFilter("scoreMin")} />
-              </label>
-              <label>
-                Score to
-                <input type="text" inputMode="text" autoComplete="off" placeholder="e.g. 3" value={filters.scoreMax} onChange={setFilter("scoreMax")} />
-              </label>
-            </div>
             <div className="filterfoot">
               <span>Showing {rows.length} of {GAMES.length}</span>
               <button type="button" onClick={() => setFilters(emptyFilters)} disabled={!activeFilterCount}>Clear filters</button>
@@ -1316,6 +1310,17 @@ export default function Home() {
               {scoreErrors.score && <span className="error">{scoreErrors.score}</span>}
 
               <label>
+                Game Type *
+                <select value={scoreForm.gameType} onChange={setScoreField("gameType")}>
+                  <option value="">Select…</option>
+                  {GAME_TYPES.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </label>
+              {scoreErrors.gameType && <span className="error">{scoreErrors.gameType}</span>}
+
+              <label>
                 Number of Players *
                 <select value={scoreForm.numPlayers} onChange={onNumPlayersChange}>
                   <option value="">Select…</option>
@@ -1390,6 +1395,15 @@ export default function Home() {
               </label>
               {tournamentErrors.name && <span className="error">{tournamentErrors.name}</span>}
 
+              <label>
+                Date
+                <input
+                  type="date"
+                  value={tournamentForm.date}
+                  onChange={(e) => setTournamentForm((f) => ({ ...f, date: e.target.value || todayISO() }))}
+                />
+              </label>
+
               {["A", "B"].map((side) => {
                 const nameKey = side === "A" ? "teamAName" : "teamBName";
                 const listKey = side === "A" ? "teamA" : "teamB";
@@ -1461,6 +1475,15 @@ export default function Home() {
           >
             <h2>Start a Round</h2>
             <form onSubmit={saveRound} noValidate>
+              <label>
+                Date
+                <input
+                  type="date"
+                  value={roundForm.date}
+                  onChange={(e) => setRoundForm((f) => ({ ...f, date: e.target.value || todayISO() }))}
+                />
+              </label>
+
               <label className="autocomplete">
                 Course *
                 <input

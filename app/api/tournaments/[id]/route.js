@@ -3,56 +3,37 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-// POST /api/tournaments  { name, teams: [{ name, players: [id,...] }, { name, players: [...] }] }
-export async function POST(request) {
-  let tournamentId = null;
+// GET /api/tournaments/123 — tournament, its two teams and their participants
+export async function GET(request, { params }) {
+  const { id: rawId } = await params;
+  const id = Number(rawId);
+  if (!Number.isInteger(id)) return NextResponse.json({ error: "Invalid tournament" }, { status: 400 });
+
   try {
-    const body = await request.json();
-    const name = String(body.name || "").trim();
-    const teams = Array.isArray(body.teams) ? body.teams : [];
+    const t = await sql`SELECT id, name, status, created_at, to_char(played_date, 'YYYY-MM-DD') AS played_date FROM tournaments WHERE id = ${id}`;
+    const tournament = t.rows[0];
+    if (!tournament) return NextResponse.json({ error: "Tournament not found" }, { status: 404 });
 
-    if (!name) return NextResponse.json({ error: "Tournament name is required" }, { status: 400 });
-    if (teams.length !== 2) return NextResponse.json({ error: "A tournament needs two teams" }, { status: 400 });
+    const tp = await sql`
+      SELECT tt.team_label, tt.name AS team_name, p.id AS player_id, p.first_name, p.surname
+      FROM tournament_teams tt
+      LEFT JOIN tournament_team_players ttp ON ttp.team_id = tt.id
+      LEFT JOIN players p ON p.id = ttp.player_id
+      WHERE tt.tournament_id = ${id}
+      ORDER BY tt.team_label, p.first_name`;
 
-    const cleaned = teams.map((t) => ({
-      name: String(t?.name || "").trim(),
-      players: Array.isArray(t?.players) ? t.players.map(Number) : [],
-    }));
-    if (cleaned.some((t) => !t.name)) {
-      return NextResponse.json({ error: "Both teams need a name" }, { status: 400 });
-    }
-    if (cleaned[0].name.toLowerCase() === cleaned[1].name.toLowerCase()) {
-      return NextResponse.json({ error: "Team names must be different" }, { status: 400 });
-    }
-    if (cleaned.some((t) => t.players.length === 0)) {
-      return NextResponse.json({ error: "Each team needs at least one participant" }, { status: 400 });
-    }
-    const all = cleaned.flatMap((t) => t.players);
-    if (all.some((n) => !Number.isInteger(n)) || new Set(all).size !== all.length) {
-      return NextResponse.json({ error: "Invalid participants" }, { status: 400 });
+    const map = new Map();
+    for (const r of tp.rows) {
+      if (!map.has(r.team_label)) map.set(r.team_label, { label: r.team_label, name: r.team_name, players: [] });
+      if (r.player_id) map.get(r.team_label).players.push({ id: r.player_id, first_name: r.first_name, surname: r.surname });
     }
 
-    const r = await sql`INSERT INTO tournaments (name) VALUES (${name}) RETURNING id`;
-    tournamentId = r.rows[0].id;
-
-    const labels = ["A", "B"];
-    for (let i = 0; i < 2; i++) {
-      const t = await sql`
-        INSERT INTO tournament_teams (tournament_id, team_label, name)
-        VALUES (${tournamentId}, ${labels[i]}, ${cleaned[i].name}) RETURNING id`;
-      for (const pid of cleaned[i].players) {
-        await sql`
-          INSERT INTO tournament_team_players (tournament_id, team_id, player_id)
-          VALUES (${tournamentId}, ${t.rows[0].id}, ${pid})`;
-      }
-    }
-
-    return NextResponse.json({ id: tournamentId, name });
+    return NextResponse.json(
+      { tournament, teams: [...map.values()] },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
-    console.error("POST /api/tournaments failed:", err);
-    if (tournamentId) {
-      try { await sql`DELETE FROM tournaments WHERE id = ${tournamentId}`; } catch {}
-    }
-    return NextResponse.json({ error: "Could not start tournament" }, { status: 500 });
+    console.error("GET /api/tournaments/[id] failed:", err);
+    return NextResponse.json({ error: "Could not load tournament" }, { status: 500 });
   }
 }

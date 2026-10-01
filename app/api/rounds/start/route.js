@@ -49,10 +49,11 @@ export async function POST(request) {
     }
 
     // --- title: "Date – Course – Match type", with (2), (3)... for repeats ---
-    const now = new Date();
-    const playedDate = now.toLocaleDateString("en-CA", { timeZone: "Europe/London" }); // YYYY-MM-DD
-    const prettyDate = now.toLocaleDateString("en-GB", {
-      day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London",
+    const todayLondon = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/London" }); // YYYY-MM-DD
+    const playedDate = String(body.date || "").trim() || todayLondon;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(playedDate)) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
+    const prettyDate = new Date(`${playedDate}T12:00:00Z`).toLocaleDateString("en-GB", {
+      day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
     });
     const base = `${prettyDate} – ${course.name} – ${gameType}`;
     const like = base.replace(/[\\%_]/g, (m) => "\\" + m) + " (%";

@@ -1,6 +1,8 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 
+const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles", "Stroke Play"];
+
 export async function POST(request) {
   let body;
   try {
@@ -11,6 +13,7 @@ export async function POST(request) {
 
   const date = (body.date || "").trim();
   const courseName = (body.courseName || "").trim();
+  const gameType = body.gameType;
   const numPlayers = Number(body.numPlayers);
   const playerIds = Array.isArray(body.playerIds) ? body.playerIds.map(Number) : [];
   const strokesRaw = body.strokes;
@@ -18,6 +21,7 @@ export async function POST(request) {
 
   if (!date) return NextResponse.json({ error: "Date is required" }, { status: 400 });
   if (!courseName) return NextResponse.json({ error: "Course is required" }, { status: 400 });
+  if (!GAME_TYPES.includes(gameType)) return NextResponse.json({ error: "Game type is required" }, { status: 400 });
   if (!Number.isInteger(numPlayers) || numPlayers < 1 || numPlayers > 4) {
     return NextResponse.json({ error: "Number of players must be between 1 and 4" }, { status: 400 });
   }
@@ -61,9 +65,9 @@ export async function POST(request) {
     }
 
     const { rows } = await sql`
-      INSERT INTO scores (played_date, course_id, course_name, strokes, score_to_par, num_players)
-      VALUES (${date}, ${courseId}, ${storedCourseName}, ${strokes}, ${scoreToPar}, ${numPlayers})
-      RETURNING id, played_date, course_name, strokes, score_to_par, num_players, created_at
+      INSERT INTO scores (played_date, course_id, course_name, game_type, strokes, score_to_par, num_players)
+      VALUES (${date}, ${courseId}, ${storedCourseName}, ${gameType}, ${strokes}, ${scoreToPar}, ${numPlayers})
+      RETURNING id, played_date, course_name, game_type, strokes, score_to_par, num_players, created_at
     `;
     const score = rows[0];
 

@@ -89,7 +89,6 @@ col.d{width:20%}col.c{width:27%}col.g{width:21%}col.s{width:13%}col.p{width:19%}
 .filterpanel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px;display:flex;flex-direction:column;gap:12px}
 .filterpanel label{display:flex;flex-direction:column;gap:6px;font:14px system-ui,sans-serif;color:var(--muted);flex:1;min-width:0}
 .filterpanel select,.filterpanel input{font:16px system-ui,sans-serif;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);min-width:0;width:100%;box-sizing:border-box}
-.scorefilter{display:flex;gap:10px}
 .filterfoot{display:flex;align-items:center;justify-content:space-between;font:13px system-ui,sans-serif;color:var(--muted)}
 .filterfoot button{font:600 14px system-ui,sans-serif;min-height:40px;padding:0 16px;border-radius:10px;background:var(--ecru);color:var(--green);border:1.5px solid var(--green);cursor:pointer}
 .filterfoot button:disabled{opacity:.5;cursor:default}
