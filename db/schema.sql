@@ -100,3 +100,27 @@ CREATE TABLE IF NOT EXISTS api_usage (
   month TEXT PRIMARY KEY,
   calls INT DEFAULT 0
 );
+
+-- Tournaments (Team A vs Team B shell)
+CREATE TABLE IF NOT EXISTS tournaments (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'in_progress',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS tournament_teams (
+  id SERIAL PRIMARY KEY,
+  tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  team_label TEXT NOT NULL,
+  name TEXT NOT NULL,
+  UNIQUE (tournament_id, team_label)
+);
+
+-- A player can only be on one team in a given tournament
+CREATE TABLE IF NOT EXISTS tournament_team_players (
+  tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  team_id INTEGER NOT NULL REFERENCES tournament_teams(id) ON DELETE CASCADE,
+  player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  PRIMARY KEY (tournament_id, player_id)
+);
