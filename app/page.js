@@ -12,8 +12,8 @@ function ordinal(n) {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 const fmtDate = (iso) => {
-  const [, m, d] = iso.split("-");
-  return `${ordinal(+d)} ${MONTHS[+m - 1]}`;
+  const [y, m, d] = iso.split("-");
+  return `${ordinal(+d)} ${MONTHS[+m - 1]} '${y.slice(-2)}`;
 };
 const fmtLongDate = (iso) => {
   const [y, m, d] = iso.split("-");
