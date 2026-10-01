@@ -102,3 +102,8 @@ footer{text-align:center;color:var(--muted);font:13px system-ui,sans-serif;paddi
   table{font-size:15px}th,td{padding:14px 18px}
   .scoreinputs{flex-direction:row;gap:10px}
 }
+
+.tourteams{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tourteam{background:var(--card);border:1px solid var(--line);border-top:5px solid var(--green2);border-radius:14px;padding:12px}
+.tourteamname{margin:0 0 6px;font:600 15px system-ui,sans-serif;color:var(--green)}
+.tourteam ul{padding-left:16px;font:14px system-ui,sans-serif;color:var(--ink)}

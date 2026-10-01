@@ -36,6 +36,7 @@ const GAME_RULES = {
   "Fourball": { mode: "teams", minTeams: 2, maxTeams: 2, minPerTeam: 2 },
   "Gruesomes": { mode: "teams", minTeams: 2, maxTeams: 2, minPerTeam: 2 },
 };
+const emptyTournamentForm = { name: "", teamAName: "", teamBName: "", teamA: [], teamB: [] };
 const emptyRoundForm = { courseName: "", courseId: null, teeSetId: "", gameType: "", teams: [], players: [] };
 
 function ScorecardPreview({ tee }) {
@@ -334,6 +335,66 @@ function LiveRound({ roundId, onClose }) {
   );
 }
 
+function TournamentHome({ tournamentId, onClose }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [note, setNote] = useState(false);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/tournaments/${tournamentId}`, { cache: "no-store" });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || "Could not load tournament");
+        if (alive) setData(d);
+      } catch (err) {
+        if (alive) setError(err.message || "Could not load tournament");
+      }
+    })();
+    return () => { alive = false; };
+  }, [tournamentId]);
+
+  const wrap = { padding: "16px 12px 48px", maxWidth: 960, margin: "0 auto" };
+  const backBtn = { background: "transparent", border: "none", color: GREEN, font: "inherit", cursor: "pointer", padding: 0 };
+
+  if (error || !data) {
+    return (
+      <div style={wrap}>
+        <button type="button" onClick={onClose} style={backBtn}>← Home</button>
+        {error ? <p className="error" style={{ marginTop: 16 }}>{error}</p> : <p style={{ marginTop: 16 }}>Loading tournament…</p>}
+      </div>
+    );
+  }
+
+  const { tournament, teams } = data;
+  const nameOf = (p) => `${p.first_name}${p.surname ? ` ${p.surname}` : ""}`;
+
+  return (
+    <div style={wrap}>
+      <button type="button" onClick={onClose} style={backBtn}>← Home</button>
+      <h1 style={{ fontSize: 24, margin: "8px 0 14px", color: GREEN }}>{tournament.name}</h1>
+
+      <div className="tourteams">
+        {teams.map((t) => (
+          <div key={t.label} className="tourteam">
+            <p className="tourteamname">{t.name}</p>
+            <ul>
+              {t.players.map((p) => <li key={p.id}>{nameOf(p)}</li>)}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      <button type="button" className="logscore" style={{ marginTop: 16, minHeight: 48, width: "100%", fontSize: 16 }} onClick={() => setNote(true)}>
+        + Add match
+      </button>
+      {note && <p className="muted" style={{ marginTop: 10 }}>Match setup is coming next.</p>}
+    </div>
+  );
+}
+
 export default function Home() {
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
   const [openId, setOpenId] = useState(null);
@@ -365,6 +426,11 @@ export default function Home() {
   const [remoteError, setRemoteError] = useState("");
   const [teeSets, setTeeSets] = useState([]);
   const [liveRoundId, setLiveRoundId] = useState(null);
+  const [tournamentId, setTournamentId] = useState(null);
+  const [tournamentForm, setTournamentForm] = useState(emptyTournamentForm);
+  const [tournamentErrors, setTournamentErrors] = useState({});
+  const [tournamentSaving, setTournamentSaving] = useState(false);
+  const [tournamentSaveError, setTournamentSaveError] = useState("");
   const [activeRounds, setActiveRounds] = useState([]);
   const [activeLoading, setActiveLoading] = useState(false);
   const [activeError, setActiveError] = useState("");
@@ -419,6 +485,12 @@ export default function Home() {
       setCourseSuggestions([]);
       setCourseOpen(false);
       resetRemote();
+      loadPlayers();
+    }
+    if (name === "startTournament") {
+      setTournamentForm(emptyTournamentForm);
+      setTournamentErrors({});
+      setTournamentSaveError("");
       loadPlayers();
     }
     if (name === "startRound") {
@@ -754,6 +826,57 @@ export default function Home() {
     }));
   };
 
+  const toggleTourPlayer = (side, playerId) => {
+    setTournamentForm((f) => {
+      const key = side === "A" ? "teamA" : "teamB";
+      const list = f[key];
+      return { ...f, [key]: list.includes(playerId) ? list.filter((id) => id !== playerId) : [...list, playerId] };
+    });
+  };
+
+  const saveTournament = async (e) => {
+    e.preventDefault();
+    const f = tournamentForm;
+    const nextErrors = {};
+    if (!f.name.trim()) nextErrors.name = "Tournament name is required";
+    if (!f.teamAName.trim()) nextErrors.teamAName = "Team A name is required";
+    if (!f.teamBName.trim()) nextErrors.teamBName = "Team B name is required";
+    if (f.teamAName.trim() && f.teamAName.trim().toLowerCase() === f.teamBName.trim().toLowerCase()) {
+      nextErrors.teamBName = "Team names must be different";
+    }
+    if (f.teamA.length === 0) nextErrors.teamA = "Select at least one participant for Team A";
+    if (f.teamB.length === 0) nextErrors.teamB = "Select at least one participant for Team B";
+    if (Object.keys(nextErrors).length) {
+      setTournamentErrors(nextErrors);
+      return;
+    }
+
+    setTournamentErrors({});
+    setTournamentSaveError("");
+    setTournamentSaving(true);
+    try {
+      const res = await fetch("/api/tournaments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: f.name.trim(),
+          teams: [
+            { name: f.teamAName.trim(), players: f.teamA },
+            { name: f.teamBName.trim(), players: f.teamB },
+          ],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not start tournament");
+      closeModal();
+      setTournamentId(data.id);
+    } catch (err) {
+      setTournamentSaveError(err.message || "Something went wrong — try again.");
+    } finally {
+      setTournamentSaving(false);
+    }
+  };
+
   const saveRound = async (e) => {
     e.preventDefault();
     const nextErrors = {};
@@ -859,6 +982,10 @@ export default function Home() {
     );
   };
 
+  if (tournamentId) {
+    return <TournamentHome tournamentId={tournamentId} onClose={() => setTournamentId(null)} />;
+  }
+
   if (liveRoundId) {
     return <LiveRound roundId={liveRoundId} onClose={() => setLiveRoundId(null)} />;
   }
@@ -913,7 +1040,7 @@ export default function Home() {
             <li>Follow the score hole by hole</li>
           </ul>
           <div className="actions">
-            <button type="button">Start a new tournament</button>
+            <button type="button" onClick={() => openModal("startTournament")}>Start a new tournament</button>
             <button type="button" className="secondary">View existing tournaments</button>
           </div>
         </section>
@@ -1236,6 +1363,88 @@ export default function Home() {
               <div className="modalactions">
                 <button type="button" className="cancel" onClick={closeModal} disabled={scoreSaving}>Cancel</button>
                 <button type="submit" className="save" disabled={scoreSaving}>{scoreSaving ? "Saving…" : "Save"}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {modal === "startTournament" && (
+        <div className="overlay" onClick={closeModal}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Start a tournament"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Start a Tournament</h2>
+            <form onSubmit={saveTournament} noValidate>
+              <label>
+                Tournament Name *
+                <input
+                  type="text"
+                  value={tournamentForm.name}
+                  onChange={(e) => setTournamentForm((f) => ({ ...f, name: e.target.value }))}
+                  autoComplete="off"
+                />
+              </label>
+              {tournamentErrors.name && <span className="error">{tournamentErrors.name}</span>}
+
+              {["A", "B"].map((side) => {
+                const nameKey = side === "A" ? "teamAName" : "teamBName";
+                const listKey = side === "A" ? "teamA" : "teamB";
+                const otherKey = side === "A" ? "teamB" : "teamA";
+                const team = tournamentForm[listKey];
+                return (
+                  <Fragment key={side}>
+                    <label>
+                      Team {side} Name *
+                      <input
+                        type="text"
+                        value={tournamentForm[nameKey]}
+                        onChange={(e) => setTournamentForm((f) => ({ ...f, [nameKey]: e.target.value }))}
+                        autoComplete="off"
+                      />
+                    </label>
+                    {tournamentErrors[nameKey] && <span className="error">{tournamentErrors[nameKey]}</span>}
+
+                    <div className="teamblock">
+                      <p className="fieldlabel">Team {side} Participants * ({team.length} selected)</p>
+                      {listLoading && <p className="muted">Loading players…</p>}
+                      {!listLoading && playerList.length === 0 && (
+                        <p className="muted">No players yet — add one from the menu first.</p>
+                      )}
+                      {!listLoading && playerList.length > 0 && (
+                        <div className="playerchecks">
+                          {playerList.map((p) => {
+                            const checked = team.includes(p.id);
+                            const disabled = !checked && tournamentForm[otherKey].includes(p.id);
+                            return (
+                              <label key={p.id} className={"checkrow" + (disabled ? " disabled" : "")}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={disabled}
+                                  onChange={() => toggleTourPlayer(side, p.id)}
+                                />
+                                {p.first_name}{p.surname ? ` ${p.surname}` : ""}
+                                {disabled ? ` (Team ${side === "A" ? "B" : "A"})` : ""}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {tournamentErrors[listKey] && <span className="error">{tournamentErrors[listKey]}</span>}
+                  </Fragment>
+                );
+              })}
+
+              {tournamentSaveError && <span className="error">{tournamentSaveError}</span>}
+
+              <div className="modalactions">
+                <button type="button" className="cancel" onClick={closeModal} disabled={tournamentSaving}>Cancel</button>
+                <button type="submit" className="save" disabled={tournamentSaving}>{tournamentSaving ? "Starting…" : "Start Tournament"}</button>
               </div>
             </form>
           </div>
