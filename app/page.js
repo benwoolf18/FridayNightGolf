@@ -22,7 +22,7 @@ const fmtLongDate = (iso) => {
 const fmtScore = (n) => (n > 0 ? `+${n}` : n === 0 ? "E" : String(n));
 
 const emptyForm = { firstName: "", surname: "", handicap: "", photo: "" };
-const emptyScoreForm = { date: "", courseName: "", gameType: "", strokes: "", scoreToPar: "", numPlayers: "", playerIds: [] };
+const emptyScoreForm = { date: "", courseName: "", gameType: "", strokes: "", scoreToPar: "", numPlayers: "", playerIds: [], notFull18: false, holesPlayed: "" };
 const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles", "Stroke Play"];
 // Player/team rules per game type
 const GAME_RULES = {
@@ -429,6 +429,7 @@ export default function Home() {
   const [tournamentErrors, setTournamentErrors] = useState({});
   const [tournamentSaving, setTournamentSaving] = useState(false);
   const [tournamentSaveError, setTournamentSaveError] = useState("");
+  const [editingScoreId, setEditingScoreId] = useState(null);
   const [games, setGames] = useState([]);
   const [gamesLoading, setGamesLoading] = useState(true);
   const [gamesError, setGamesError] = useState("");
@@ -479,7 +480,7 @@ export default function Home() {
 
   useEffect(() => {
     const close = (e) => {
-      if (!e.target.closest(".players")) setOpenId(null);
+      if (!e.target.closest(".players") && !e.target.closest(".holes")) setOpenId(null);
       if (!e.target.closest(".menu") && !e.target.closest(".burger")) setMenuOpen(false);
       if (!e.target.closest(".autocomplete")) setCourseOpen(false);
     };
@@ -497,6 +498,7 @@ export default function Home() {
     if (name === "viewPlayers") loadPlayers();
     if (name === "currentRounds") loadActiveRounds();
     if (name === "logScore") {
+      setEditingScoreId(null);
       setScoreForm(emptyScoreForm);
       setScoreErrors({});
       setScoreSaveError("");
@@ -626,6 +628,28 @@ export default function Home() {
     setCourseOpen(false);
   };
 
+  const openEditScore = (g) => {
+    setMenuOpen(false);
+    setEditingScoreId(g.id);
+    setScoreForm({
+      date: g.date,
+      courseName: g.course,
+      gameType: g.gameType || "",
+      strokes: g.strokes === null || g.strokes === undefined ? "" : String(g.strokes),
+      scoreToPar: g.score === null || g.score === undefined ? "" : g.score === 0 ? "E" : g.score > 0 ? `+${g.score}` : String(g.score),
+      numPlayers: String(g.playerIds.length || ""),
+      playerIds: g.playerIds,
+      notFull18: g.holesPlayed !== null && g.holesPlayed !== undefined,
+      holesPlayed: g.holesPlayed === null || g.holesPlayed === undefined ? "" : String(g.holesPlayed),
+    });
+    setScoreErrors({});
+    setScoreSaveError("");
+    setCourseSuggestions([]);
+    setCourseOpen(false);
+    resetRemote();
+    loadPlayers();
+    setModal("logScore");
+  };
   const onNumPlayersChange = (e) => {
     const val = e.target.value;
     const cap = Number(val) || 0;
@@ -653,6 +677,12 @@ export default function Home() {
     if (!scoreForm.strokes.trim() && !scoreForm.scoreToPar.trim()) {
       nextErrors.score = "Enter either Number of Strokes or Score";
     }
+    if (scoreForm.notFull18) {
+      const h = Number(scoreForm.holesPlayed);
+      if (!scoreForm.holesPlayed.trim() || !Number.isInteger(h) || h < 1 || h > 17) {
+        nextErrors.holesPlayed = "Enter the number of holes played (1 to 17)";
+      }
+    }
     if (cap && scoreForm.playerIds.length !== cap) {
       nextErrors.players = `Select exactly ${cap} player${cap === 1 ? "" : "s"}`;
     }
@@ -664,13 +694,14 @@ export default function Home() {
     setScoreSaveError("");
     setScoreSaving(true);
     try {
-      const res = await fetch("/api/scores", {
-        method: "POST",
+      const res = await fetch(editingScoreId ? `/api/scores/${editingScoreId}` : "/api/scores", {
+        method: editingScoreId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date: scoreForm.date,
           courseName: scoreForm.courseName.trim(),
           gameType: scoreForm.gameType,
+          holesPlayed: scoreForm.notFull18 ? Number(scoreForm.holesPlayed) : null,
           strokes: scoreForm.strokes.trim() || null,
           scoreToPar: scoreForm.scoreToPar.trim() || null,
           numPlayers: cap,
@@ -1112,7 +1143,7 @@ export default function Home() {
         )}
         <div className="tablewrap">
           <table>
-            <colgroup><col className="d" /><col className="c" /><col className="g" /><col className="s" /><col className="p" /></colgroup>
+            <colgroup><col className="d" /><col className="c" /><col className="g" /><col className="s" /><col className="p" /><col className="e" /></colgroup>
             <thead>
               <tr>
                 <Th k="date" label="Date" />
@@ -1120,12 +1151,13 @@ export default function Home() {
                 <Th k="gameType" label="Game" />
                 <Th k="score" label="Score" />
                 <th>Players</th>
+                <th><span className="sr">Edit</span></th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="noresults">
+                  <td colSpan={6} className="noresults">
                     {gamesLoading
                       ? "Loading results…"
                       : gamesError
@@ -1147,6 +1179,15 @@ export default function Home() {
                       : g.strokes !== null && g.strokes !== undefined
                       ? `${g.strokes} str`
                       : "—"}
+                    {g.holesPlayed !== null && g.holesPlayed !== undefined && (
+                      <span
+                        className={"holes" + (openId === `h${g.id}` ? " open" : "")}
+                        onClick={() => setOpenId(openId === `h${g.id}` ? null : `h${g.id}`)}
+                      >
+                        *
+                        <span className="tip">{g.holesPlayed} {g.holesPlayed === 1 ? "hole" : "holes"}</span>
+                      </span>
+                    )}
                   </td>
                   <td>
                     <span
@@ -1156,6 +1197,9 @@ export default function Home() {
                       {g.players.length}
                       <span className="tip">{g.players.join(", ")}</span>
                     </span>
+                  </td>
+                  <td>
+                    <button type="button" className="editbtn" aria-label="Edit score" onClick={() => openEditScore(g)}>✎</button>
                   </td>
                 </tr>
               ))}
@@ -1302,10 +1346,10 @@ export default function Home() {
             className="modal"
             role="dialog"
             aria-modal="true"
-            aria-label="Log a score"
+            aria-label={editingScoreId ? "Edit score" : "Log a score"}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2>Log a Score</h2>
+            <h2>{editingScoreId ? "Edit Score" : "Log a Score"}</h2>
             <form onSubmit={saveScore} noValidate>
               <label>
                 Date *
@@ -1392,6 +1436,30 @@ export default function Home() {
                 )}
               </div>
               {scoreErrors.players && <span className="error">{scoreErrors.players}</span>}
+
+              <label className="checkrow">
+                <input
+                  type="checkbox"
+                  checked={scoreForm.notFull18}
+                  onChange={(e) => setScoreForm((f) => ({ ...f, notFull18: e.target.checked, holesPlayed: e.target.checked ? f.holesPlayed : "" }))}
+                />
+                Not a full 18 holes
+              </label>
+              {scoreForm.notFull18 && (
+                <>
+                  <label>
+                    Number of Holes Played *
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={scoreForm.holesPlayed}
+                      onChange={setScoreField("holesPlayed")}
+                      placeholder="e.g. 9"
+                    />
+                  </label>
+                  {scoreErrors.holesPlayed && <span className="error">{scoreErrors.holesPlayed}</span>}
+                </>
+              )}
 
               {scoreSaveError && <span className="error">{scoreSaveError}</span>}
 

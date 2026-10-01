@@ -129,3 +129,6 @@ CREATE TABLE IF NOT EXISTS tournament_team_players (
 ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS played_date DATE;
 UPDATE tournaments SET played_date = created_at::date WHERE played_date IS NULL;
 ALTER TABLE scores ADD COLUMN IF NOT EXISTS game_type TEXT;
+
+-- Holes played on a logged score (NULL = a full 18)
+ALTER TABLE scores ADD COLUMN IF NOT EXISTS holes_played INTEGER;

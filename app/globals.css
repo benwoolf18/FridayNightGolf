@@ -79,11 +79,18 @@ th button:focus-visible{outline:2px solid var(--green2);outline-offset:2px}
 th[aria-sort="ascending"] button,th[aria-sort="descending"] button{color:var(--green)}
 .arrow{font-size:10px;opacity:.35}
 th[aria-sort="ascending"] .arrow,th[aria-sort="descending"] .arrow{opacity:1}
-col.d{width:20%}col.c{width:27%}col.g{width:21%}col.s{width:13%}col.p{width:19%}
+col.d{width:18%}col.c{width:25%}col.g{width:19%}col.s{width:14%}col.p{width:14%}col.e{width:10%}
 .score{font-weight:700;color:var(--green)}
 .players{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:36px;padding:0 10px;border-radius:18px;background:var(--bg);font-weight:600;cursor:pointer}
 .tip{position:absolute;bottom:120%;right:0;background:var(--ink);color:var(--bg);padding:8px 12px;border-radius:8px;font-size:13px;font-weight:400;white-space:normal;width:max-content;max-width:190px;text-align:left;opacity:0;pointer-events:none;transition:opacity .15s;z-index:5}
 .players:hover .tip,.players.open .tip{opacity:1}
+.holes{position:relative;display:inline-block;margin-left:2px;padding:6px 6px;cursor:pointer}
+.holes:hover .tip,.holes.open .tip{opacity:1}
+.holes .tip{right:auto;left:50%;transform:translateX(-50%)}
+.editbtn{all:unset;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:18px;color:var(--green);font-size:16px}
+.editbtn:focus-visible{outline:2px solid var(--green2);outline-offset:2px}
+th:nth-child(5),td:nth-child(5){text-align:center}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .resultsbtns{display:flex;gap:8px;align-items:center}
 .filterbtn{font:600 14px system-ui,sans-serif;min-height:40px;padding:0 16px;border-radius:10px;background:transparent;color:var(--green);border:1.5px solid var(--green);cursor:pointer;white-space:nowrap}
 .filterpanel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px;display:flex;flex-direction:column;gap:12px}

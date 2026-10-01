@@ -1,7 +1,6 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
-
-const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles", "Stroke Play"];
+import { parseScoreBody, findOrCreateCourse } from "../../../lib/scores";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +14,9 @@ export async function GET() {
              s.game_type AS "gameType",
              s.strokes,
              s.score_to_par AS score,
-             COALESCE(json_agg(p.first_name ORDER BY p.first_name) FILTER (WHERE p.id IS NOT NULL), '[]'::json) AS players
+             s.holes_played AS "holesPlayed",
+             COALESCE(json_agg(p.first_name ORDER BY p.first_name) FILTER (WHERE p.id IS NOT NULL), '[]'::json) AS players,
+             COALESCE(json_agg(p.id ORDER BY p.first_name) FILTER (WHERE p.id IS NOT NULL), '[]'::json) AS "playerIds"
       FROM scores s
       LEFT JOIN score_players sp ON sp.score_id = s.id
       LEFT JOIN players p ON p.id = sp.player_id
@@ -28,6 +29,7 @@ export async function GET() {
   }
 }
 
+// POST /api/scores — log a score
 export async function POST(request) {
   let body;
   try {
@@ -36,74 +38,24 @@ export async function POST(request) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const date = (body.date || "").trim();
-  const courseName = (body.courseName || "").trim();
-  const gameType = body.gameType;
-  const numPlayers = Number(body.numPlayers);
-  const playerIds = Array.isArray(body.playerIds) ? body.playerIds.map(Number) : [];
-  const strokesRaw = body.strokes;
-  const scoreToParRaw = body.scoreToPar;
-
-  if (!date) return NextResponse.json({ error: "Date is required" }, { status: 400 });
-  if (!courseName) return NextResponse.json({ error: "Course is required" }, { status: 400 });
-  if (!GAME_TYPES.includes(gameType)) return NextResponse.json({ error: "Game type is required" }, { status: 400 });
-  if (!Number.isInteger(numPlayers) || numPlayers < 1 || numPlayers > 4) {
-    return NextResponse.json({ error: "Number of players must be between 1 and 4" }, { status: 400 });
-  }
-  if (playerIds.length !== numPlayers || playerIds.some((id) => !Number.isInteger(id))) {
-    return NextResponse.json(
-      { error: `Select exactly ${numPlayers} player(s)` },
-      { status: 400 }
-    );
-  }
-
-  const strokes =
-    strokesRaw !== undefined && strokesRaw !== null && String(strokesRaw).trim() !== ""
-      ? Number(strokesRaw)
-      : null;
-  const scoreToParText = String(scoreToParRaw ?? "").trim();
-  const scoreToPar =
-    scoreToParText === ""
-      ? null
-      : /^(e|even)$/i.test(scoreToParText)
-      ? 0
-      : Number(scoreToParText);
-
-  if (strokes === null && scoreToPar === null) {
-    return NextResponse.json(
-      { error: "Enter either Number of Strokes or Score" },
-      { status: 400 }
-    );
-  }
-  if ((strokes !== null && Number.isNaN(strokes)) || (scoreToPar !== null && Number.isNaN(scoreToPar))) {
-    return NextResponse.json({ error: "Score must be a number" }, { status: 400 });
-  }
+  const parsed = parseScoreBody(body);
+  if (parsed.error) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const v = parsed.value;
 
   try {
-    // Find the course case-insensitively, or create it if this is the first time it's played
-    const existing = await sql`SELECT id, name FROM courses WHERE name ILIKE ${courseName} LIMIT 1`;
-    let courseId, storedCourseName;
-    if (existing.rows.length) {
-      courseId = existing.rows[0].id;
-      storedCourseName = existing.rows[0].name;
-    } else {
-      const inserted = await sql`INSERT INTO courses (name) VALUES (${courseName}) RETURNING id, name`;
-      courseId = inserted.rows[0].id;
-      storedCourseName = inserted.rows[0].name;
-    }
+    const course = await findOrCreateCourse(v.courseName);
 
     const { rows } = await sql`
-      INSERT INTO scores (played_date, course_id, course_name, game_type, strokes, score_to_par, num_players)
-      VALUES (${date}, ${courseId}, ${storedCourseName}, ${gameType}, ${strokes}, ${scoreToPar}, ${numPlayers})
-      RETURNING id, played_date, course_name, game_type, strokes, score_to_par, num_players, created_at
-    `;
-    const score = rows[0];
+      INSERT INTO scores (played_date, course_id, course_name, game_type, strokes, score_to_par, holes_played, num_players)
+      VALUES (${v.date}, ${course.id}, ${course.name}, ${v.gameType}, ${v.strokes}, ${v.scoreToPar}, ${v.holesPlayed}, ${v.numPlayers})
+      RETURNING id`;
+    const scoreId = rows[0].id;
 
-    for (const playerId of playerIds) {
-      await sql`INSERT INTO score_players (score_id, player_id) VALUES (${score.id}, ${playerId})`;
+    for (const playerId of v.playerIds) {
+      await sql`INSERT INTO score_players (score_id, player_id) VALUES (${scoreId}, ${playerId})`;
     }
 
-    return NextResponse.json(score, { status: 201 });
+    return NextResponse.json({ id: scoreId }, { status: 201 });
   } catch (err) {
     console.error("POST /api/scores failed:", err);
     return NextResponse.json({ error: "Could not save score" }, { status: 500 });
