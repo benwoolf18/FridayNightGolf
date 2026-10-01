@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 
+const PAGE_SIZE = 5;
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DEFAULT_DIR = { date: "desc", course: "asc", gameType: "asc", score: "asc" };
 const emptyFilters = { course: "", gameType: "", players: "" };
@@ -396,6 +397,7 @@ function TournamentHome({ tournamentId, onClose }) {
 export default function Home() {
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
   const [openId, setOpenId] = useState(null);
+  const [page, setPage] = useState(0);
   const [filters, setFilters] = useState(emptyFilters);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -477,6 +479,12 @@ export default function Home() {
   useEffect(() => {
     loadGames();
   }, []);
+
+  // back to the first page whenever the filters or sorting change
+  useEffect(() => {
+    setPage(0);
+    setOpenId(null);
+  }, [filters, sort]);
 
   useEffect(() => {
     const close = (e) => {
@@ -1015,6 +1023,14 @@ export default function Home() {
     return sort.dir === "asc" ? r : -r;
   });
 
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const pageRows = rows.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const goToPage = (n) => {
+    setOpenId(null);
+    setPage(Math.max(0, Math.min(totalPages - 1, n)));
+  };
+
   const onSort = (key) =>
     setSort((s) =>
       s.key === key
@@ -1168,7 +1184,7 @@ export default function Home() {
                   </td>
                 </tr>
               )}
-              {rows.map((g) => (
+              {pageRows.map((g) => (
                 <tr key={g.id}>
                   <td>{fmtDate(g.date)}</td>
                   <td>{g.course}</td>
@@ -1205,6 +1221,13 @@ export default function Home() {
               ))}
             </tbody>
           </table>
+          {rows.length > PAGE_SIZE && (
+            <div className="pager">
+              <button type="button" onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 0}>← Prev</button>
+              <span>Page {currentPage + 1} of {totalPages}</span>
+              <button type="button" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages - 1}>Next →</button>
+            </div>
+          )}
         </div>
       </section>
 
