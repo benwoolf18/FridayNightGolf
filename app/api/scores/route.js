@@ -3,6 +3,31 @@ import { NextResponse } from "next/server";
 
 const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles", "Stroke Play"];
 
+export const dynamic = "force-dynamic";
+
+// GET /api/scores — every logged round with its players, newest first
+export async function GET() {
+  try {
+    const { rows } = await sql`
+      SELECT s.id,
+             to_char(s.played_date, 'YYYY-MM-DD') AS date,
+             s.course_name AS course,
+             s.game_type AS "gameType",
+             s.strokes,
+             s.score_to_par AS score,
+             COALESCE(json_agg(p.first_name ORDER BY p.first_name) FILTER (WHERE p.id IS NOT NULL), '[]'::json) AS players
+      FROM scores s
+      LEFT JOIN score_players sp ON sp.score_id = s.id
+      LEFT JOIN players p ON p.id = sp.player_id
+      GROUP BY s.id
+      ORDER BY s.played_date DESC, s.id DESC`;
+    return NextResponse.json(rows, { headers: { "Cache-Control": "no-store" } });
+  } catch (err) {
+    console.error("GET /api/scores failed:", err);
+    return NextResponse.json({ error: "Could not load results" }, { status: 500 });
+  }
+}
+
 export async function POST(request) {
   let body;
   try {
@@ -36,10 +61,13 @@ export async function POST(request) {
     strokesRaw !== undefined && strokesRaw !== null && String(strokesRaw).trim() !== ""
       ? Number(strokesRaw)
       : null;
+  const scoreToParText = String(scoreToParRaw ?? "").trim();
   const scoreToPar =
-    scoreToParRaw !== undefined && scoreToParRaw !== null && String(scoreToParRaw).trim() !== ""
-      ? Number(scoreToParRaw)
-      : null;
+    scoreToParText === ""
+      ? null
+      : /^(e|even)$/i.test(scoreToParText)
+      ? 0
+      : Number(scoreToParText);
 
   if (strokes === null && scoreToPar === null) {
     return NextResponse.json(

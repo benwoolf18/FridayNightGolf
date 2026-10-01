@@ -2,14 +2,6 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 
-// Demo data - will be replaced by real records later
-const GAMES = [
-  { id: 1, date: "2026-08-26", course: "Shrivenham Park", gameType: "Fourball", score: -2, players: ["Dave", "Nigel", "Darren", "Ben"] },
-  { id: 2, date: "2026-08-19", course: "Marlborough Downs", gameType: "Stroke Play", score: 3, players: ["Ben", "Lee", "Carl"] },
-  { id: 3, date: "2026-08-12", course: "Broome Manor", gameType: "Texas Scramble", score: 0, players: ["Dave", "Ben", "Mike", "Nigel", "Lee"] },
-  { id: 4, date: "2026-08-05", course: "Shrivenham Park", gameType: "Foursomes", score: -5, players: ["Darren", "Ben", "Carl", "Mike"] },
-];
-
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DEFAULT_DIR = { date: "desc", course: "asc", gameType: "asc", score: "asc" };
 const emptyFilters = { course: "", gameType: "", players: "" };
@@ -437,6 +429,22 @@ export default function Home() {
   const [tournamentErrors, setTournamentErrors] = useState({});
   const [tournamentSaving, setTournamentSaving] = useState(false);
   const [tournamentSaveError, setTournamentSaveError] = useState("");
+  const [games, setGames] = useState([]);
+  const [gamesLoading, setGamesLoading] = useState(true);
+  const [gamesError, setGamesError] = useState("");
+  const loadGames = async () => {
+    try {
+      const res = await fetch(`/api/scores?t=${Date.now()}`, { cache: "no-store" });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Could not load results");
+      setGames(d);
+      setGamesError("");
+    } catch (err) {
+      setGamesError(err.message || "Could not load results");
+    } finally {
+      setGamesLoading(false);
+    }
+  };
   const [activeRounds, setActiveRounds] = useState([]);
   const [activeLoading, setActiveLoading] = useState(false);
   const [activeError, setActiveError] = useState("");
@@ -464,6 +472,10 @@ export default function Home() {
     setRemoteError("");
     setTeeSets([]);
   };
+
+  useEffect(() => {
+    loadGames();
+  }, []);
 
   useEffect(() => {
     const close = (e) => {
@@ -668,6 +680,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save score");
       closeModal();
+      loadGames();
     } catch (err) {
       setScoreSaveError(err.message || "Something went wrong — try again.");
     } finally {
@@ -945,16 +958,16 @@ export default function Home() {
     }
   };
 
-  const courseOptions = [...new Set(GAMES.map((g) => g.course))].sort((a, b) => a.localeCompare(b));
-  const gameTypeOptions = [...new Set(GAMES.map((g) => g.gameType))].sort((a, b) => a.localeCompare(b));
-  const playerCountOptions = [...new Set(GAMES.map((g) => g.players.length))].sort((a, b) => a - b);
+  const courseOptions = [...new Set(games.map((g) => g.course))].sort((a, b) => a.localeCompare(b));
+  const gameTypeOptions = [...new Set(games.map((g) => g.gameType).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const playerCountOptions = [...new Set(games.map((g) => g.players.length))].sort((a, b) => a - b);
 
   const activeFilterCount =
     (filters.course ? 1 : 0) +
     (filters.gameType ? 1 : 0) +
     (filters.players ? 1 : 0);
 
-  const filteredGames = GAMES.filter(
+  const filteredGames = games.filter(
     (g) =>
       (!filters.course || g.course === filters.course) &&
       (!filters.gameType || g.gameType === filters.gameType) &&
@@ -964,6 +977,9 @@ export default function Home() {
 
   const rows = [...filteredGames].sort((a, b) => {
     const x = a[sort.key], y = b[sort.key];
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
     const r = typeof x === "string" ? x.localeCompare(y) : x - y;
     return sort.dir === "asc" ? r : -r;
   });
@@ -1089,7 +1105,7 @@ export default function Home() {
               </select>
             </label>
             <div className="filterfoot">
-              <span>Showing {rows.length} of {GAMES.length}</span>
+              <span>Showing {rows.length} of {games.length}</span>
               <button type="button" onClick={() => setFilters(emptyFilters)} disabled={!activeFilterCount}>Clear filters</button>
             </div>
           </div>
@@ -1108,14 +1124,30 @@ export default function Home() {
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={5} className="noresults">No results match these filters.</td></tr>
+                <tr>
+                  <td colSpan={5} className="noresults">
+                    {gamesLoading
+                      ? "Loading results…"
+                      : gamesError
+                      ? gamesError
+                      : games.length === 0
+                      ? "No scores logged yet."
+                      : "No results match these filters."}
+                  </td>
+                </tr>
               )}
               {rows.map((g) => (
                 <tr key={g.id}>
                   <td>{fmtDate(g.date)}</td>
                   <td>{g.course}</td>
-                  <td>{g.gameType}</td>
-                  <td className="score">{fmtScore(g.score)}</td>
+                  <td>{g.gameType || "—"}</td>
+                  <td className="score">
+                    {g.score !== null && g.score !== undefined
+                      ? fmtScore(g.score)
+                      : g.strokes !== null && g.strokes !== undefined
+                      ? `${g.strokes} str`
+                      : "—"}
+                  </td>
                   <td>
                     <span
                       className={"players" + (openId === g.id ? " open" : "")}
@@ -1131,8 +1163,6 @@ export default function Home() {
           </table>
         </div>
       </section>
-
-      <footer>Demo data</footer>
 
       {modal === "currentRounds" && (
         <div className="overlay" onClick={closeModal}>
