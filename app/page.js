@@ -26,7 +26,16 @@ const fmtScore = (n) => (n > 0 ? `+${n}` : n === 0 ? "E" : String(n));
 const emptyForm = { firstName: "", surname: "", handicap: "", photo: "" };
 const emptyScoreForm = { date: "", courseName: "", strokes: "", scoreToPar: "", numPlayers: "", playerIds: [] };
 const GAME_TYPES = ["Fourball", "Gruesomes", "Foursomes", "Texas Scramble", "Singles", "Stroke Play"];
-const emptyRoundForm = { courseName: "", courseId: null, teeSetId: "", gameType: "", numTeams: "", teams: [] };
+// Player/team rules per game type
+const GAME_RULES = {
+  "Singles": { mode: "players", min: 1, max: 2 },
+  "Stroke Play": { mode: "players", min: 1, max: 4 },
+  "Texas Scramble": { mode: "teams", minTeams: 1, maxTeams: 2, minPerTeam: 1 },
+  "Foursomes": { mode: "teams", minTeams: 2, maxTeams: 2, minPerTeam: 2 },
+  "Fourball": { mode: "teams", minTeams: 2, maxTeams: 2, minPerTeam: 2 },
+  "Gruesomes": { mode: "teams", minTeams: 2, maxTeams: 2, minPerTeam: 2 },
+};
+const emptyRoundForm = { courseName: "", courseId: null, teeSetId: "", gameType: "", teams: [], players: [] };
 
 function ScorecardPreview({ tee }) {
   const holes = [...tee.holes].sort((a, b) => a.hole_number - b.hole_number);
@@ -701,13 +710,32 @@ export default function Home() {
     );
   };
 
-  const onNumTeamsChange = (e) => {
-    const n = Number(e.target.value) || 0;
+  // Changing game type wipes any players/teams already chosen
+  const onGameTypeChange = (e) => {
+    const gameType = e.target.value;
+    const rules = GAME_RULES[gameType];
+    setRoundErrors({});
     setRoundForm((f) => ({
       ...f,
-      numTeams: e.target.value,
-      teams: Array.from({ length: n }, (_, i) => f.teams[i] || []),
+      gameType,
+      players: [],
+      teams: rules && rules.mode === "teams" ? Array.from({ length: rules.minTeams }, () => []) : [],
     }));
+  };
+
+  const addTeam = () =>
+    setRoundForm((f) => ({ ...f, teams: [...f.teams, []] }));
+
+  const removeTeam = () =>
+    setRoundForm((f) => ({ ...f, teams: f.teams.slice(0, -1) }));
+
+  const togglePlayer = (playerId) => {
+    setRoundForm((f) => {
+      const max = GAME_RULES[f.gameType]?.max ?? 4;
+      if (f.players.includes(playerId)) return { ...f, players: f.players.filter((id) => id !== playerId) };
+      if (f.players.length >= max) return f;
+      return { ...f, players: [...f.players, playerId] };
+    });
   };
 
   const toggleTeamPlayer = (teamIdx, playerId) => {
@@ -728,12 +756,27 @@ export default function Home() {
     const nextErrors = {};
     if (!roundForm.courseName.trim()) nextErrors.courseName = "Course is required";
     if (!roundForm.gameType) nextErrors.gameType = "Game type is required";
-    if (!roundForm.numTeams) nextErrors.numTeams = "Number of teams is required";
-    const emptyTeams = roundForm.teams
-      .map((t, i) => (t.length === 0 ? i + 1 : null))
-      .filter(Boolean);
-    if (roundForm.numTeams && emptyTeams.length) {
-      nextErrors.teams = `Add at least one player to Team ${emptyTeams.join(", Team ")}`;
+    const rules = GAME_RULES[roundForm.gameType];
+    let teamsPayload = [];
+    if (rules?.mode === "players") {
+      const n = roundForm.players.length;
+      if (n < rules.min || n > rules.max) {
+        nextErrors.teams = rules.max === 2
+          ? "Select 1 or 2 players"
+          : `Select between ${rules.min} and ${rules.max} players`;
+      }
+      // each player is their own entry in the round
+      teamsPayload = roundForm.players.map((id) => [id]);
+    } else if (rules?.mode === "teams") {
+      const short = roundForm.teams
+        .map((t, i) => (t.length < rules.minPerTeam ? i + 1 : null))
+        .filter(Boolean);
+      if (short.length) {
+        nextErrors.teams = rules.minPerTeam > 1
+          ? `Team ${short.join(", Team ")} needs at least ${rules.minPerTeam} players`
+          : `Add at least one player to Team ${short.join(", Team ")}`;
+      }
+      teamsPayload = roundForm.teams;
     }
     if (Object.keys(nextErrors).length) {
       setRoundErrors(nextErrors);
@@ -752,7 +795,7 @@ export default function Home() {
           courseId: roundForm.courseId,
           gameType: roundForm.gameType,
           teeSetId: roundForm.teeSetId ? Number(roundForm.teeSetId) : null,
-          teams: roundForm.teams,
+          teams: teamsPayload,
         }),
       });
       const data = await res.json();
@@ -1169,7 +1212,7 @@ export default function Home() {
                 Game Type *
                 <select
                   value={roundForm.gameType}
-                  onChange={(e) => setRoundForm((f) => ({ ...f, gameType: e.target.value }))}
+                  onChange={onGameTypeChange}
                 >
                   <option value="">Select…</option>
                   {GAME_TYPES.map((g) => (
@@ -1179,47 +1222,91 @@ export default function Home() {
               </label>
               {roundErrors.gameType && <span className="error">{roundErrors.gameType}</span>}
 
-              <label>
-                Number of Teams *
-                <select value={roundForm.numTeams} onChange={onNumTeamsChange}>
-                  <option value="">Select…</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                </select>
-              </label>
-              {roundErrors.numTeams && <span className="error">{roundErrors.numTeams}</span>}
+              {(() => {
+                const rules = GAME_RULES[roundForm.gameType];
+                if (!rules) return null;
+                const nameOf = (p) => `${p.first_name}${p.surname ? ` ${p.surname}` : ""}`;
+                const playersState = listLoading
+                  ? <p className="muted">Loading players…</p>
+                  : playerList.length === 0
+                  ? <p className="muted">No players yet — add one from the menu first.</p>
+                  : null;
 
-              {roundForm.teams.map((team, teamIdx) => (
-                <div key={teamIdx} className="teamblock">
-                  <p className="fieldlabel">Team {teamIdx + 1} * ({team.length} selected)</p>
-                  {listLoading && <p className="muted">Loading players…</p>}
-                  {!listLoading && playerList.length === 0 && (
-                    <p className="muted">No players yet — add one from the menu first.</p>
-                  )}
-                  {!listLoading && playerList.length > 0 && (
-                    <div className="playerchecks">
-                      {playerList.map((p) => {
-                        const checked = team.includes(p.id);
-                        const otherTeam = roundForm.teams.findIndex((t, i) => i !== teamIdx && t.includes(p.id));
-                        const disabled = !checked && otherTeam !== -1;
-                        return (
-                          <label key={p.id} className={"checkrow" + (disabled ? " disabled" : "")}>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              disabled={disabled}
-                              onChange={() => toggleTeamPlayer(teamIdx, p.id)}
-                            />
-                            {p.first_name}{p.surname ? ` ${p.surname}` : ""}
-                            {disabled ? ` (Team ${otherTeam + 1})` : ""}
-                          </label>
-                        );
-                      })}
+                if (rules.mode === "players") {
+                  const full = roundForm.players.length >= rules.max;
+                  return (
+                    <div className="teamblock">
+                      <p className="fieldlabel">
+                        Select Players * ({roundForm.players.length} of {rules.max} max)
+                      </p>
+                      {playersState}
+                      {!playersState && (
+                        <div className="playerchecks">
+                          {playerList.map((p) => {
+                            const checked = roundForm.players.includes(p.id);
+                            const disabled = !checked && full;
+                            return (
+                              <label key={p.id} className={"checkrow" + (disabled ? " disabled" : "")}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={disabled}
+                                  onChange={() => togglePlayer(p.id)}
+                                />
+                                {nameOf(p)}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                  );
+                }
+
+                return (
+                  <>
+                    {roundForm.teams.map((team, teamIdx) => (
+                      <div key={teamIdx} className="teamblock">
+                        <p className="fieldlabel">
+                          Team {teamIdx + 1} * ({team.length} selected{rules.minPerTeam > 1 ? `, min ${rules.minPerTeam}` : ""})
+                        </p>
+                        {playersState}
+                        {!playersState && (
+                          <div className="playerchecks">
+                            {playerList.map((p) => {
+                              const checked = team.includes(p.id);
+                              const otherTeam = roundForm.teams.findIndex((t, i) => i !== teamIdx && t.includes(p.id));
+                              const disabled = !checked && otherTeam !== -1;
+                              return (
+                                <label key={p.id} className={"checkrow" + (disabled ? " disabled" : "")}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={disabled}
+                                    onChange={() => toggleTeamPlayer(teamIdx, p.id)}
+                                  />
+                                  {nameOf(p)}
+                                  {disabled ? ` (Team ${otherTeam + 1})` : ""}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {rules.maxTeams > rules.minTeams && (
+                      <div className="modalactions">
+                        {roundForm.teams.length < rules.maxTeams && (
+                          <button type="button" className="cancel" onClick={addTeam}>+ Add team</button>
+                        )}
+                        {roundForm.teams.length > rules.minTeams && (
+                          <button type="button" className="cancel" onClick={removeTeam}>Remove team {roundForm.teams.length}</button>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
               {roundErrors.teams && <span className="error">{roundErrors.teams}</span>}
 
               <div>
