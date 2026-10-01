@@ -4,14 +4,15 @@ import { Fragment, useEffect, useRef, useState } from "react";
 
 // Demo data - will be replaced by real records later
 const GAMES = [
-  { id: 1, date: "2026-08-26", course: "Shrivenham Park", score: -2, players: ["Dave", "Nigel", "Darren", "Ben"] },
-  { id: 2, date: "2026-08-19", course: "Marlborough Downs", score: 3, players: ["Ben", "Lee", "Carl"] },
-  { id: 3, date: "2026-08-12", course: "Broome Manor", score: 0, players: ["Dave", "Ben", "Mike", "Nigel", "Lee"] },
-  { id: 4, date: "2026-08-05", course: "Shrivenham Park", score: -5, players: ["Darren", "Ben", "Carl", "Mike"] },
+  { id: 1, date: "2026-08-26", course: "Shrivenham Park", gameType: "Fourball", score: -2, players: ["Dave", "Nigel", "Darren", "Ben"] },
+  { id: 2, date: "2026-08-19", course: "Marlborough Downs", gameType: "Stroke Play", score: 3, players: ["Ben", "Lee", "Carl"] },
+  { id: 3, date: "2026-08-12", course: "Broome Manor", gameType: "Texas Scramble", score: 0, players: ["Dave", "Ben", "Mike", "Nigel", "Lee"] },
+  { id: 4, date: "2026-08-05", course: "Shrivenham Park", gameType: "Foursomes", score: -5, players: ["Darren", "Ben", "Carl", "Mike"] },
 ];
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const DEFAULT_DIR = { date: "desc", course: "asc", score: "asc" };
+const DEFAULT_DIR = { date: "desc", course: "asc", gameType: "asc", score: "asc" };
+const emptyFilters = { course: "", gameType: "", players: "", scoreMin: "", scoreMax: "" };
 
 function ordinal(n) {
   const s = ["th", "st", "nd", "rd"], v = n % 100;
@@ -336,6 +337,8 @@ function LiveRound({ roundId, onClose }) {
 export default function Home() {
   const [sort, setSort] = useState({ key: "date", dir: "desc" });
   const [openId, setOpenId] = useState(null);
+  const [filters, setFilters] = useState(emptyFilters);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [modal, setModal] = useState(null); // "addPlayer" | "editPlayer" | "viewPlayers" | null
   const [form, setForm] = useState(emptyForm);
@@ -809,7 +812,30 @@ export default function Home() {
     }
   };
 
-  const rows = [...GAMES].sort((a, b) => {
+  const courseOptions = [...new Set(GAMES.map((g) => g.course))].sort((a, b) => a.localeCompare(b));
+  const gameTypeOptions = [...new Set(GAMES.map((g) => g.gameType))].sort((a, b) => a.localeCompare(b));
+  const playerCountOptions = [...new Set(GAMES.map((g) => g.players.length))].sort((a, b) => a - b);
+
+  const parseScore = (v) => (/^[+-]?\d+$/.test(v.trim()) ? Number(v.trim()) : null);
+  const minScore = parseScore(filters.scoreMin);
+  const maxScore = parseScore(filters.scoreMax);
+  const activeFilterCount =
+    (filters.course ? 1 : 0) +
+    (filters.gameType ? 1 : 0) +
+    (filters.players ? 1 : 0) +
+    (minScore !== null || maxScore !== null ? 1 : 0);
+
+  const filteredGames = GAMES.filter(
+    (g) =>
+      (!filters.course || g.course === filters.course) &&
+      (!filters.gameType || g.gameType === filters.gameType) &&
+      (!filters.players || g.players.length === Number(filters.players)) &&
+      (minScore === null || g.score >= minScore) &&
+      (maxScore === null || g.score <= maxScore)
+  );
+  const setFilter = (key) => (e) => setFilters((f) => ({ ...f, [key]: e.target.value }));
+
+  const rows = [...filteredGames].sort((a, b) => {
     const x = a[sort.key], y = b[sort.key];
     const r = typeof x === "string" ? x.localeCompare(y) : x - y;
     return sort.dir === "asc" ? r : -r;
@@ -896,24 +922,78 @@ export default function Home() {
       <section className="results">
         <div className="resultshead">
           <h2>Results</h2>
-          <button type="button" className="logscore" onClick={() => openModal("logScore")}>📝 Log a score</button>
+          <div className="resultsbtns">
+            <button
+              type="button"
+              className="filterbtn"
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen((o) => !o)}
+            >
+              Filter{activeFilterCount ? ` (${activeFilterCount})` : ""}
+            </button>
+            <button type="button" className="logscore" onClick={() => openModal("logScore")}>📝 Log a score</button>
+          </div>
         </div>
+        {filtersOpen && (
+          <div className="filterpanel">
+            <label>
+              Course
+              <select value={filters.course} onChange={setFilter("course")}>
+                <option value="">All courses</option>
+                {courseOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label>
+              Game type
+              <select value={filters.gameType} onChange={setFilter("gameType")}>
+                <option value="">All game types</option>
+                {gameTypeOptions.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </label>
+            <label>
+              Number of players
+              <select value={filters.players} onChange={setFilter("players")}>
+                <option value="">Any number</option>
+                {playerCountOptions.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <div className="scorefilter">
+              <label>
+                Score from
+                <input type="text" inputMode="text" autoComplete="off" placeholder="e.g. -5" value={filters.scoreMin} onChange={setFilter("scoreMin")} />
+              </label>
+              <label>
+                Score to
+                <input type="text" inputMode="text" autoComplete="off" placeholder="e.g. 3" value={filters.scoreMax} onChange={setFilter("scoreMax")} />
+              </label>
+            </div>
+            <div className="filterfoot">
+              <span>Showing {rows.length} of {GAMES.length}</span>
+              <button type="button" onClick={() => setFilters(emptyFilters)} disabled={!activeFilterCount}>Clear filters</button>
+            </div>
+          </div>
+        )}
         <div className="tablewrap">
           <table>
-            <colgroup><col className="d" /><col className="c" /><col className="s" /><col className="p" /></colgroup>
+            <colgroup><col className="d" /><col className="c" /><col className="g" /><col className="s" /><col className="p" /></colgroup>
             <thead>
               <tr>
                 <Th k="date" label="Date" />
                 <Th k="course" label="Course" />
+                <Th k="gameType" label="Game" />
                 <Th k="score" label="Score" />
                 <th>Players</th>
               </tr>
             </thead>
             <tbody>
+              {rows.length === 0 && (
+                <tr><td colSpan={5} className="noresults">No results match these filters.</td></tr>
+              )}
               {rows.map((g) => (
                 <tr key={g.id}>
                   <td>{fmtDate(g.date)}</td>
                   <td>{g.course}</td>
+                  <td>{g.gameType}</td>
                   <td className="score">{fmtScore(g.score)}</td>
                   <td>
                     <span

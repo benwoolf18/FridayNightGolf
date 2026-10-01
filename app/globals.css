@@ -79,11 +79,21 @@ th button:focus-visible{outline:2px solid var(--green2);outline-offset:2px}
 th[aria-sort="ascending"] button,th[aria-sort="descending"] button{color:var(--green)}
 .arrow{font-size:10px;opacity:.35}
 th[aria-sort="ascending"] .arrow,th[aria-sort="descending"] .arrow{opacity:1}
-col.d{width:27%}col.c{width:32%}col.s{width:16%}col.p{width:25%}
+col.d{width:20%}col.c{width:27%}col.g{width:21%}col.s{width:13%}col.p{width:19%}
 .score{font-weight:700;color:var(--green)}
 .players{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:36px;padding:0 10px;border-radius:18px;background:var(--bg);font-weight:600;cursor:pointer}
 .tip{position:absolute;bottom:120%;right:0;background:var(--ink);color:var(--bg);padding:8px 12px;border-radius:8px;font-size:13px;font-weight:400;white-space:normal;width:max-content;max-width:190px;text-align:left;opacity:0;pointer-events:none;transition:opacity .15s;z-index:5}
 .players:hover .tip,.players.open .tip{opacity:1}
+.resultsbtns{display:flex;gap:8px;align-items:center}
+.filterbtn{font:600 14px system-ui,sans-serif;min-height:40px;padding:0 16px;border-radius:10px;background:transparent;color:var(--green);border:1.5px solid var(--green);cursor:pointer;white-space:nowrap}
+.filterpanel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px;display:flex;flex-direction:column;gap:12px}
+.filterpanel label{display:flex;flex-direction:column;gap:6px;font:14px system-ui,sans-serif;color:var(--muted);flex:1;min-width:0}
+.filterpanel select,.filterpanel input{font:16px system-ui,sans-serif;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);min-width:0;width:100%;box-sizing:border-box}
+.scorefilter{display:flex;gap:10px}
+.filterfoot{display:flex;align-items:center;justify-content:space-between;font:13px system-ui,sans-serif;color:var(--muted)}
+.filterfoot button{font:600 14px system-ui,sans-serif;min-height:40px;padding:0 16px;border-radius:10px;background:var(--ecru);color:var(--green);border:1.5px solid var(--green);cursor:pointer}
+.filterfoot button:disabled{opacity:.5;cursor:default}
+.noresults{text-align:center!important;color:var(--muted);padding:20px 12px}
 footer{text-align:center;color:var(--muted);font:13px system-ui,sans-serif;padding:0 20px 28px}
 @media (min-width:700px){
   header{padding:40px 20px 34px}h1{font-size:44px}.flag{font-size:38px}
