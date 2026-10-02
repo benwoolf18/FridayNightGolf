@@ -117,3 +117,12 @@ footer{text-align:center;color:var(--muted);font:13px system-ui,sans-serif;paddi
 .pager{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-top:1px solid var(--line);font:13px system-ui,sans-serif;color:var(--muted)}
 .pager button{font:600 14px system-ui,sans-serif;min-height:40px;padding:0 14px;border-radius:10px;background:transparent;color:var(--green);border:1.5px solid var(--green);cursor:pointer;white-space:nowrap}
 .pager button:disabled{opacity:.35;cursor:default}
+
+.dashsection{margin-top:22px}
+.dashsection h2{font-size:20px;margin:0 0 10px}
+.leaderboard{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-top:5px solid var(--green2);border-radius:16px;padding:16px 10px}
+.lbteam{text-align:center;min-width:0}
+.lbname{margin:0;font:600 15px system-ui,sans-serif;color:var(--green);overflow-wrap:anywhere}
+.lbscore{margin:4px 0 0;font:700 44px Georgia,serif;color:var(--ink);line-height:1}
+.lbvs{font:600 13px system-ui,sans-serif;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.dashtable th:last-child,.dashtable td:last-child{text-align:center}

@@ -367,7 +367,11 @@ function TournamentHome({ tournamentId, onClose }) {
   }
 
   const { tournament, teams } = data;
-  const nameOf = (p) => `${p.first_name}${p.surname ? ` ${p.surname}` : ""}`;
+  const teamOne = teams[0]?.name || "Team 1";
+  const teamTwo = teams[1]?.name || "Team 2";
+  // Shell only: points will be calculated from match results later
+  const scoreOne = 0;
+  const scoreTwo = 0;
 
   return (
     <div style={wrap}>
@@ -375,21 +379,56 @@ function TournamentHome({ tournamentId, onClose }) {
       <h1 style={{ fontSize: 24, margin: "8px 0 4px", color: GREEN }}>{tournament.name}</h1>
       {tournament.played_date && <p className="muted" style={{ margin: "0 0 14px" }}>{fmtLongDate(tournament.played_date)}</p>}
 
-      <div className="tourteams">
-        {teams.map((t) => (
-          <div key={t.label} className="tourteam">
-            <p className="tourteamname">{t.name}</p>
-            <ul>
-              {t.players.map((p) => <li key={p.id}>{nameOf(p)}</li>)}
-            </ul>
-          </div>
-        ))}
-      </div>
-
-      <button type="button" className="logscore" style={{ marginTop: 16, minHeight: 48, width: "100%", fontSize: 16 }} onClick={() => setNote(true)}>
-        + Add match
+      <button type="button" className="logscore" style={{ minHeight: 48, width: "100%", fontSize: 16 }} onClick={() => setNote(true)}>
+        + Create a round
       </button>
-      {note && <p className="muted" style={{ marginTop: 10 }}>Match setup is coming next.</p>}
+      {note && <p className="muted" style={{ marginTop: 10 }}>Round setup is coming next.</p>}
+
+      <section className="dashsection">
+        <h2>Leaderboard</h2>
+        <div className="leaderboard">
+          <div className="lbteam">
+            <p className="lbname">{teamOne}</p>
+            <p className="lbscore">{scoreOne}</p>
+          </div>
+          <div className="lbvs">vs</div>
+          <div className="lbteam">
+            <p className="lbname">{teamTwo}</p>
+            <p className="lbscore">{scoreTwo}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="dashsection">
+        <h2>Race for MVP</h2>
+        <div className="tablewrap">
+          <table className="dashtable">
+            <thead><tr><th>Player</th><th>Rounds Won</th></tr></thead>
+            <tbody><tr><td colSpan={2} className="noresults">No results yet</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="dashsection">
+        <h2>Handicaps</h2>
+        <div className="tablewrap">
+          <p className="muted" style={{ padding: 16, margin: 0 }}>Coming soon.</p>
+        </div>
+      </section>
+
+      <section className="dashsection">
+        <h2>Results</h2>
+        <div className="tablewrap">
+          <p className="muted" style={{ padding: 16, margin: 0 }}>No rounds played yet.</p>
+        </div>
+      </section>
+
+      <section className="dashsection">
+        <h2>Scheduled Rounds</h2>
+        <div className="tablewrap">
+          <p className="muted" style={{ padding: 16, margin: 0 }}>No rounds scheduled yet.</p>
+        </div>
+      </section>
     </div>
   );
 }
