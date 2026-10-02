@@ -508,6 +508,27 @@ export default function Home() {
     setModal(null);
     setLiveRoundId(id);
   };
+  const [tournamentList, setTournamentList] = useState([]);
+  const [tournamentsLoading, setTournamentsLoading] = useState(false);
+  const [tournamentsError, setTournamentsError] = useState("");
+  const loadTournaments = async () => {
+    setTournamentsLoading(true);
+    setTournamentsError("");
+    try {
+      const res = await fetch(`/api/tournaments?t=${Date.now()}`, { cache: "no-store" });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Could not load tournaments");
+      setTournamentList(d);
+    } catch (err) {
+      setTournamentsError(err.message || "Could not load tournaments");
+    } finally {
+      setTournamentsLoading(false);
+    }
+  };
+  const openTournament = (id) => {
+    setModal(null);
+    setTournamentId(id);
+  };
   const resetRemote = () => {
     setRemoteResults(null);
     setRemoteBusy(false);
@@ -544,6 +565,7 @@ export default function Home() {
     setSaveError("");
     if (name === "viewPlayers") loadPlayers();
     if (name === "currentRounds") loadActiveRounds();
+    if (name === "viewTournaments") loadTournaments();
     if (name === "logScore") {
       setEditingScoreId(null);
       setScoreForm(emptyScoreForm);
@@ -1147,7 +1169,7 @@ export default function Home() {
           </ul>
           <div className="actions">
             <button type="button" onClick={() => openModal("startTournament")}>Start a new tournament</button>
-            <button type="button" className="secondary">View existing tournaments</button>
+            <button type="button" className="secondary" onClick={() => openModal("viewTournaments")}>View existing tournaments</button>
           </div>
         </section>
       </main>
@@ -1300,7 +1322,52 @@ export default function Home() {
                         background: "transparent", cursor: "pointer", font: "inherit", color: "inherit",
                       }}
                     >
-                      {r.title} <span style={{ opacity: 0.5, fontSize: 12 }}>· id {r.id}</span>
+                      {r.title}
+                    </button>
+                  ))}
+                </div>
+              )
+            )}
+
+            <div className="modalactions">
+              <button type="button" className="cancel" onClick={closeModal}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modal === "viewTournaments" && (
+        <div className="overlay" onClick={closeModal}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Existing tournaments"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Existing Tournaments</h2>
+
+            {tournamentsLoading && <p className="muted">Loading tournaments…</p>}
+            {tournamentsError && <span className="error">{tournamentsError}</span>}
+
+            {!tournamentsLoading && !tournamentsError && (
+              tournamentList.length === 0 ? (
+                <p className="muted">No tournaments yet.</p>
+              ) : (
+                <div>
+                  {tournamentList.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => openTournament(t.id)}
+                      style={{
+                        display: "block", width: "100%", textAlign: "left", padding: "10px 12px",
+                        marginBottom: 8, border: "1px solid rgba(0,0,0,0.18)", borderRadius: 8,
+                        background: "transparent", cursor: "pointer", font: "inherit", color: "inherit",
+                      }}
+                    >
+                      {t.name}
+                      {t.played_date && <span style={{ display: "block", opacity: 0.6, fontSize: 13, marginTop: 2 }}>{fmtLongDate(t.played_date)}</span>}
                     </button>
                   ))}
                 </div>

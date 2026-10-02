@@ -3,6 +3,20 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+// GET /api/tournaments — all tournaments, newest first
+export async function GET() {
+  try {
+    const { rows } = await sql`
+      SELECT id, name, to_char(COALESCE(played_date, created_at::date), 'YYYY-MM-DD') AS played_date
+      FROM tournaments
+      ORDER BY COALESCE(played_date, created_at::date) DESC, created_at DESC`;
+    return NextResponse.json(rows, { headers: { "Cache-Control": "no-store" } });
+  } catch (err) {
+    console.error("GET /api/tournaments failed:", err);
+    return NextResponse.json({ error: "Could not load tournaments" }, { status: 500 });
+  }
+}
+
 // POST /api/tournaments  { name, teams: [{ name, players: [id,...] }, { name, players: [...] }] }
 export async function POST(request) {
   let tournamentId = null;
